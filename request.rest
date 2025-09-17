@@ -1,0 +1,31 @@
+POST http://localhost:5000/api/users
+Content-Type: application/json
+
+{
+    "name": "Ankur",
+    "email": "abc@gmail.com",
+    "password": "testadmin",
+    "phone": 9421316775,
+    "role": "user"
+}
+
+###
+
+POST http://localhost:5000/api/user/login
+Content-Type: application/json
+
+{
+    "email": "abc@gmail.com",
+    "password": "testadmin"
+}
+
+###
+
+GET http://localhost:5000/api/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNDE5YTQ1ZWMtYWI2Yy00ODY4LThlN2QtZmZlZDljNDg0ODk0IiwidXNlcl9uYW1lIjoiQmh1bWkiLCJ1c2VyX2VtYWlsIjoiYW5rdXIxODgxODhAZ21haWwuY29tIiwiaWF0IjoxNzE4MTkxOTc5LCJleHAiOjE3MTgxOTE5OTl9.osSSqHZWLvp8Ed-ngZ7S-orS3Wyrc1Bmbl97uHblplM
+
+###
+GET http://localhost:5000/api/login/refreshToken
+
+### Get Trips
+GET http://localhost:5000/api/trips
