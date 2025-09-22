@@ -31,7 +31,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     // const categoryId = req.body.categoryId;
     // const filename = req.body.categoryId + "img";
     // const mimetype = req.body.mimetype;
-    console.log(req.body);
     console.log(111, req.file);
     const params = {
       Bucket: bucketName,

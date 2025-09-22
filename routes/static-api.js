@@ -1,60 +1,89 @@
+
 import express from "express";
 import pool from "../db.js";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 dotenv.config();
 
+const router = express.Router();
 const bucketName = process.env.BUCKET_NAME;
 const bucketRegion = process.env.BUCKET_REGION;
-const accessKey = process.env.ACCESS_KEY;
-const secretAccessKey = process.env.SECRET_ACCESS_KEY;
-const router = express.Router();
+
+// S3 client: automatically fetches credentials from environment / IAM role
 const s3 = new S3Client({
-  credentials: {
-    accessKeyId: accessKey,
-    secretAccessKey: secretAccessKey,
-  },
   region: bucketRegion,
 });
 
+// Helper function to generate presigned URL
+async function getTripSignedUrl(bucketName, key) {
+  const command = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: key, // exact S3 key
+  });
+  return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+}
+
+// Route to get trips with presigned image URLs
 router.get("/", async (req, res) => {
   try {
-    // const trips = await pool.query('select trips.*, trip_images.image from trips left join trip_images on trips.id = trip_images.item_id');
-    const trips = await pool.query(
-      "SELECT DISTINCT ON (destination_name) * FROM trips t WHERE t.price = ( SELECT MIN(price) FROM trips WHERE destination_name = t.destination_name ) ORDER BY t.destination_name;"
+    // Fetch trips (distinct destination with min price)
+    const tripsResult = await pool.query(
+      `SELECT DISTINCT ON (destination_name) * 
+       FROM trips t 
+       WHERE t.price = (
+         SELECT MIN(price) FROM trips WHERE destination_name = t.destination_name
+       )
+       ORDER BY t.destination_name;`
     );
-    const dates = await pool.query(
-      "SELECT destination_name, MIN(from_date) AS from_date, MAX(to_date) AS to_date FROM trips GROUP BY destination_name ORDER BY destination_name;"
+
+    // Fetch min/max dates for each destination
+    const datesResult = await pool.query(
+      `SELECT destination_name, 
+              MIN(from_date) AS from_date, 
+              MAX(to_date) AS to_date 
+       FROM trips 
+       GROUP BY destination_name 
+       ORDER BY destination_name;`
     );
-    console.log(11111, dates)
-    for (const trip of trips.rows) {
-      const getObjectParams = {
-        Bucket: bucketName,
-        Key: trip.destination_name,
-      };
-      const command = new GetObjectCommand(getObjectParams);
-      const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-      trip.imageUrl = url;
-    }
-    trips.rows = trips.rows.map((trip) => {
-      dates.rows.forEach((item) => {
-      //   if (item.from_date < trip.from_date)
-      //     trip["from_month"] = item.from_date;
-      //   if (item.to_date > trip.to_date) trip["to_month"] = item.to_date;
-      if(trip.destination_name === item.destination_name) {
-        trip['from_month'] = item.from_date;
-        trip['to_month'] = item.to_date;
+
+    // Attach presigned image URL to each trip
+    for (const trip of tripsResult.rows) {
+      try {
+        trip.imageUrl = await getTripSignedUrl(bucketName, trip.destination_name);
+        console.log("Signed URL generated:", trip.imageUrl);
+      } catch (err) {
+        console.error("Failed to generate signed URL for", trip.destination_name, err);
+        trip.imageUrl = null;
       }
-      });
+    }
+
+    // Attach from_month / to_month for each trip
+    tripsResult.rows = tripsResult.rows.map((trip) => {
+      const dateEntry = datesResult.rows.find(
+        (item) => item.destination_name === trip.destination_name
+      );
+      if (dateEntry) {
+        trip.from_month = dateEntry.from_date;
+        trip.to_month = dateEntry.to_date;
+      }
       return trip;
     });
-    res.json({ trips: trips.rows });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+
+    res.json({ trips: tripsResult.rows });
+  } catch (err) {
+    console.error("Error fetching trips:", err);
+    res.status(500).json({ error: err.message });
   }
 });
+
+
+
+
+
+
+
 
 router.post("/enquire", async (req, res) => {
   try {

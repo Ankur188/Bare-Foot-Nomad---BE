@@ -11,15 +11,24 @@ import staticRouter from './routes/static-api.js';
 import imgRouter from './routes/images.js';
 import bookingRouter from './routes/booking.js'
 
+// Allow all origins temporarily
+
+
 dotenv.config();
 
 const __dirName = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT | 5000;
-const corsOptions = {credentials: true, origin: process.env.URL || '*'};
+// const corsOptions = {credentials: true, origin: process.env.URL || '*'};
+app.use(cors({
+  origin: "*",
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true
+}));
 
-app.use(cors(corsOptions));
+
+// app.use(cors(corsOptions));
 // app.use(json());
 // Parse application/json
 app.use(bodyParser.json({ limit: '20mb' }));
@@ -35,5 +44,10 @@ app.use('/api/user', authRourter);
 app.use('/api/trips', staticRouter);
 app.use('/api/img', imgRouter);
 app.use('/api/booking', bookingRouter);
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send("Something broke!");
+});
+
 
 app.listen(PORT, ()=>console.log(`server is listening on ${PORT}`));
