@@ -22,8 +22,8 @@ const app = express();
 const PORT = process.env.PORT | 5000;
 // const corsOptions = {credentials: true, origin: process.env.URL || '*'};
 app.use(cors({
-  origin: "*",
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  origin: "https://barefootnomads.netlify.app/",
+  methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
 
@@ -50,4 +50,4 @@ app.use((err, req, res, next) => {
 });
 
 
-app.listen(PORT, ()=>console.log(`server is listening on ${PORT}`));
+app.listen(PORT, '0.0.0.0' , ()=>console.log(`server is listening on ${PORT}`));
