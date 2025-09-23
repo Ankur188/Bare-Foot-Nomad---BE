@@ -10,6 +10,7 @@ import authRourter from './routes/auth.js';
 import staticRouter from './routes/static-api.js';
 import imgRouter from './routes/images.js';
 import bookingRouter from './routes/booking.js'
+import { verifyNetlifySigned } from './middleware//verify-netlify-signed.js';
 
 // Allow all origins temporarily
 
@@ -45,11 +46,11 @@ app.use(cookieParser());
 
 app.use('/', express.static(join(__dirName, 'public')));
 
-app.use('/api/users', usersRourter);
-app.use('/api/user', authRourter);
-app.use('/api/trips', staticRouter);
-app.use('/api/img', imgRouter);
-app.use('/api/booking', bookingRouter);
+app.use('/api/users', verifyNetlifySigned, usersRourter);
+app.use('/api/user', verifyNetlifySigned, authRourter);
+app.use('/api/trips', verifyNetlifySigned, staticRouter);
+app.use('/api/img', verifyNetlifySigned, imgRouter);
+app.use('/api/booking', verifyNetlifySigned, bookingRouter);
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send("Something broke!");
