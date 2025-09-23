@@ -22,7 +22,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 // const corsOptions = {credentials: true, origin: process.env.URL || '*'};
 app.use(cors({
-origin: "https://barefootnomads.netlify.app",
+origin: ["http://localhost:4200"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
+
+app.use(cors({
+origin: ["https://barefootnomads.netlify.app"],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
