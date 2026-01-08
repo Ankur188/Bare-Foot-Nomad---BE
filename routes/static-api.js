@@ -1,4 +1,3 @@
-
 import express from "express";
 import pool from "../db.js";
 import dotenv from "dotenv";
@@ -37,7 +36,7 @@ router.get("/", async (req, res) => {
        )
        ORDER BY t.destination_name;`
     );
-
+    console.log('trips', tripsResult)
     // Fetch min/max dates for each destination
     const datesResult = await pool.query(
       `SELECT destination_name, 
@@ -51,10 +50,16 @@ router.get("/", async (req, res) => {
     // Attach presigned image URL to each trip
     for (const trip of tripsResult.rows) {
       try {
-        trip.imageUrl = await getTripSignedUrl(bucketName, trip.destination_name);
-        console.log("Signed URL generated:", trip.imageUrl);
+        trip.imageUrl = await getTripSignedUrl(
+          bucketName,
+          trip.destination_name
+        );
       } catch (err) {
-        console.error("Failed to generate signed URL for", trip.destination_name, err);
+        console.error(
+          "Failed to generate signed URL for",
+          trip.destination_name,
+          err
+        );
         trip.imageUrl = null;
       }
     }
@@ -77,13 +82,6 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
-
-
-
-
 
 router.post("/enquire", async (req, res) => {
   try {
@@ -151,8 +149,8 @@ router.get("/:destination/batches", async (req, res) => {
 
     const offset = (page - 1) * limit;
 
-    if(month) {
-const query = `
+    if (month) {
+      const query = `
   SELECT *, COUNT(*) OVER() AS total_count
   FROM trips
   WHERE EXTRACT(MONTH FROM to_timestamp(from_date)) = $1
@@ -161,46 +159,46 @@ const query = `
   LIMIT $3 OFFSET $4
 `;
 
-// console.log(month)
-const values = [
-  parseInt(month, 10),
-  `%${destination}%`,
-  limit,
-  offset,
-];
+      // console.log(month)
+      const values = [parseInt(month, 10), `%${destination}%`, limit, offset];
 
-  
-const result = await pool.query(query, values);
+      const result = await pool.query(query, values);
 
-const totalTrips = result.rows.length > 0 ? parseInt(result.rows[0].total_count, 10) : 0;
-const totalPages = Math.ceil(totalTrips / limit);
+      const totalTrips =
+        result.rows.length > 0 ? parseInt(result.rows[0].total_count, 10) : 0;
+      const totalPages = Math.ceil(totalTrips / limit);
 
-res.set('Cache-Control', 'no-store'); // prevent 304 caching
-res.json({
-  page: Number(page),
-  limit: Number(limit),
-  totalTrips,
-  totalPages,
-  data: result.rows.map(({ total_count, ...trip }) => trip),
-});
-    }
-    else {
-              const page = parseInt(req.query.page) || 1;
-    // const limit = 4;
-    // const offset = (page - 1) * limit;
+      res.set("Cache-Control", "no-store"); // prevent 304 caching
+      res.json({
+        page: Number(page),
+        limit: Number(limit),
+        totalTrips,
+        totalPages,
+        data: result.rows.map(({ total_count, ...trip }) => trip),
+      });
+    } else {
+      const page = parseInt(req.query.page) || 1;
+      // const limit = 4;
+      // const offset = (page - 1) * limit;
 
-    // const destination = req.params.destination;
-    const trips = await pool.query("SELECT * FROM trips where destination_name = $1  ORDER BY price ASC LIMIT $2 OFFSET $3", [destination, limit, offset]);
-        const countResult = await pool.query("SELECT COUNT(*) FROM trips where destination_name = $1", [destination]);
-    const totalRows = parseInt(countResult.rows[0].count);
-    // console.log(totalRows)
-    const totalPages = Math.ceil(totalRows / limit);
+      // const destination = req.params.destination;
+      const trips = await pool.query(
+        "SELECT * FROM trips where destination_name = $1  ORDER BY price ASC LIMIT $2 OFFSET $3",
+        [destination, limit, offset]
+      );
+      const countResult = await pool.query(
+        "SELECT COUNT(*) FROM trips where destination_name = $1",
+        [destination]
+      );
+      const totalRows = parseInt(countResult.rows[0].count);
+      // console.log(totalRows)
+      const totalPages = Math.ceil(totalRows / limit);
 
-    res.json({
-            page: page,
-      totalPages: totalPages,
-      data: trips.rows
-    })
+      res.json({
+        page: page,
+        totalPages: totalPages,
+        data: trips.rows,
+      });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
