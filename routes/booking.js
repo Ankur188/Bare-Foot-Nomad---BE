@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../db.js';
+import { authenticateToken } from '../middleware/authorization.js';
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ const router = express.Router();
 //     }
 // })
 
-router.post('/', async (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
     try{
             const booking = await(pool.query('insert into bookings (user_id, trip_id, name, phone_number, guardian_number, email, payment, travellers, room_type, invoice_id) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10) returning *', [req.body.userId, req.body.tripId, req.body.fullName, req.body.number, req.body.guardianNumber, req.body.email, req.body.payment, req.body.travellers, req.body.roomType, 0]));
             // const booked = await(pool.query('select booked from trips where id = $1', [req.body.tripId]))
@@ -27,7 +28,7 @@ router.post('/', async (req, res) => {
     }
 })
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
     try{
          const bookingId = req.params.id;
         const bookingDetails = await pool.query("SELECT * FROM bookings where id = $1", [bookingId]);

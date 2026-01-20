@@ -29,6 +29,24 @@ router.post('/login', async(req,res)=> {
     }
 })
 
+router.post('/refresh-token', (req,res) => {
+    try {
+        // Support both cookie and body refresh token
+        const refreshToken = req.cookies.refresh_token || req.body.refreshToken;
+        if(!refreshToken) return res.status(401).json({error: 'No refresh token'});
+        jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (error, user)=> {
+            if(error) return res.status(403).json({error: error.message})
+            let tokens = jwtTokens(user);
+            res.cookie('refresh_token', tokens.refreshToken, {httpOnly: true});
+            res.json({tokens: tokens});
+        })
+    }
+    catch(error){
+        res.status(401).json({error: error.message});
+    }
+})
+
+// Keep the old GET endpoint for backward compatibility
 router.get('/refreshToken', (req,res) => {
     try {
         const refreshToken = req.cookies.refresh_token;

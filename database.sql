@@ -25,7 +25,9 @@ CREATE TABLE trips (
     inclusions TEXT NOT NULL,
     excluions TEXT NOT NULL,
     rooms TEXT NOT NULL,
-    max_adventurers INT NOT NUll
+    max_adventurers INT NOT NUll,
+    status BOOLEAN DEFAULT TRUE NOT NULL,
+    batch_name TEXT NOT NULL
 );
 
 

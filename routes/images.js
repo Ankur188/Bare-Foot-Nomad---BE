@@ -28,7 +28,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-router.post("/upload", upload.single("file"), async (req, res) => {
+router.post("/upload", authenticateToken, upload.single("file"), async (req, res) => {
   try {
     // console.log(req)
     // const data = Buffer.from(req.body.image, "base64");

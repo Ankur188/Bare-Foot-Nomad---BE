@@ -9,7 +9,8 @@ import usersRourter from './routes/users.js';
 import authRourter from './routes/auth.js';
 import staticRouter from './routes/static-api.js';
 import imgRouter from './routes/images.js';
-import bookingRouter from './routes/booking.js'
+import bookingRouter from './routes/booking.js';
+import adminRouter from './routes/admin.js';
 import { verifyNetlifySigned } from './middleware//verify-netlify-signed.js';
 
 // Allow all origins temporarily
@@ -51,6 +52,7 @@ app.use('/api/user', verifyNetlifySigned, authRourter);
 app.use('/api/trips', verifyNetlifySigned, staticRouter);
 app.use('/api/img', verifyNetlifySigned, imgRouter);
 app.use('/api/booking', verifyNetlifySigned, bookingRouter);
+app.use('/api/admin', verifyNetlifySigned, adminRouter);
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send("Something broke!");
