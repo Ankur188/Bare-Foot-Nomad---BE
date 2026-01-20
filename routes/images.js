@@ -2,27 +2,31 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/authorization.js";
 import multer from "multer";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
-const bucketName = process.env.BUCKET_NAME;
-const bucketRegion = process.env.BUCKET_REGION;
-const accessKey = process.env.ACCESS_KEY;
-const secretAccessKey = process.env.SECRET_ACCESS_KEY;
 const router = express.Router();
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
 
-const s3 = new S3Client({
-  credentials: {
-    accessKeyId: accessKey,
-    secretAccessKey: secretAccessKey,
+// Save uploads to public/uploads so express.static serves them automatically
+const uploadDir = path.join(process.cwd(), "public", "uploads");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
   },
-  region: bucketRegion,
+  filename: function (req, file, cb) {
+    // Use categoryId + original extension if provided
+    const categoryId = req.body.categoryId || req.body.name || "file";
+    const ext = path.extname(file.originalname) || "";
+    cb(null, `${categoryId}${ext}`);
+  },
 });
+
+const upload = multer({ storage: storage });
 
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
@@ -32,14 +36,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     // const filename = req.body.categoryId + "img";
     // const mimetype = req.body.mimetype;
     console.log(111, req.file);
-    const params = {
-      Bucket: bucketName,
-      Key: req.body.categoryId + "",
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-    };
-    const command = new PutObjectCommand(params);
-    await s3.send(command);
+    // File is already saved to disk by multer.diskStorage
+    // Return the public URL for the uploaded image
+    const fileName = req.file.filename;
+    const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${fileName}`;
     //refer this query
     // const result = await pool.query(
     //       'INSERT INTO trip_images (item_id, filename, mimetype, image) VALUES ((select id from trips where category = $1), $1, $2, $3) RETURNING id',
@@ -51,7 +51,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     // const imageId = result.rows[0].id;
 
-    res.send({ sucess: "File successfully uploaded" });
+    res.json({ success: true, url: publicUrl });
   } catch (error) {
     console.error("Error uploading image:", error);
     res.status(500).send("Error uploading image");
@@ -61,13 +61,14 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 router.get("/banner", async (req, res) => {
   try {
     const name = req.query.name;
-    const getObjectParams = {
-      Bucket: bucketName,
-      Key: name,
-    };
-    const command = new GetObjectCommand(getObjectParams);
-    const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    res.json({ imageUrl : url });
+    // Look for a matching file in public/uploads. If found, return the public URL.
+    const files = fs.readdirSync(uploadDir);
+    const match = files.find((f) => f.toLowerCase().startsWith(String(name).toLowerCase()));
+    if (!match) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    const url = `${req.protocol}://${req.get("host")}/uploads/${match}`;
+    res.json({ imageUrl: url });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

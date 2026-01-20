@@ -1,27 +1,24 @@
 import express from "express";
 import pool from "../db.js";
 import dotenv from "dotenv";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
 const router = express.Router();
-const bucketName = process.env.BUCKET_NAME;
-const bucketRegion = process.env.BUCKET_REGION;
 
-// S3 client: automatically fetches credentials from environment / IAM role
-const s3 = new S3Client({
-  region: bucketRegion,
-});
+// Helper: look for an image file in public/uploads that matches the key (prefix match)
+const uploadDir = path.join(process.cwd(), "public", "uploads");
+// ensure directory exists (no-op if already present)
+try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (e) {}
 
-// Helper function to generate presigned URL
-async function getTripSignedUrl(bucketName, key) {
-  const command = new GetObjectCommand({
-    Bucket: bucketName,
-    Key: key, // exact S3 key
-  });
-  return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+async function getTripSignedUrl(key, req) {
+  // Find a file whose name starts with the key (case-insensitive)
+  const files = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
+  const match = files.find((f) => f.toLowerCase().startsWith(String(key).toLowerCase()));
+  if (!match) return null;
+  return `${req.protocol}://${req.get('host')}/uploads/${match}`;
 }
 
 // Route to get trips with presigned image URLs
@@ -50,10 +47,8 @@ router.get("/", async (req, res) => {
     // Attach presigned image URL to each trip
     for (const trip of tripsResult.rows) {
       try {
-        trip.imageUrl = await getTripSignedUrl(
-          bucketName,
-          trip.destination_name
-        );
+        // Resolve local image URL for the trip (from public/uploads)
+        trip.imageUrl = await getTripSignedUrl(trip.destination_name, req);
       } catch (err) {
         console.error(
           "Failed to generate signed URL for",
