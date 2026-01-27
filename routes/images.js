@@ -42,7 +42,7 @@ router.post("/upload", authenticateToken, upload.single("file"), async (req, res
     const publicUrl = `${req.protocol}://${req.get("host")}/uploads/${fileName}`;
     //refer this query
     // const result = await pool.query(
-    //       'INSERT INTO trip_images (item_id, filename, mimetype, image) VALUES ((select id from trips where category = $1), $1, $2, $3) RETURNING id',
+    //       'INSERT INTO trip_images (item_id, filename, mimetype, image) VALUES ((select id from batches where category = $1), $1, $2, $3) RETURNING id',
     //       [filename, mimetype, data]
     //     );
 

@@ -4,10 +4,10 @@ import { authenticateToken } from '../middleware/authorization.js';
 
 const router = express.Router();
 
-// GET /api/admin/batches - Get all trips with associated users (bookings)
+// GET /api/admin/batches - Get all batches with associated users (bookings)
 router.get('/batches', authenticateToken, async (req, res) => {
     try {
-        // Fetch all trips with booking counts and user information
+        // Fetch all batches with booking counts and user information
         const query = `
             SELECT 
                 t.id,
@@ -38,8 +38,8 @@ router.get('/batches', authenticateToken, async (req, res) => {
                     json_agg(b.travellers ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
                 ) as travellers_array
-            FROM trips t
-            LEFT JOIN bookings b ON t.id = b.trip_id
+            FROM batches t
+            LEFT JOIN bookings b ON t.id = b.batch_id
             LEFT JOIN users u ON b.user_id = u.id
             GROUP BY t.id
             ORDER BY t.from_date DESC, t.destination_name;
@@ -73,7 +73,7 @@ router.get('/batches', authenticateToken, async (req, res) => {
     }
 });
 
-// GET /api/admin/batches/:id - Get specific trip with associated users
+// GET /api/admin/batches/:id - Get specific batch with associated users
 router.get('/batches/:id', authenticateToken, async (req, res) => {
     try {
         const tripId = req.params.id;
@@ -105,8 +105,8 @@ router.get('/batches/:id', authenticateToken, async (req, res) => {
                     json_agg(b.travellers ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
                 ) as travellers_array
-            FROM trips t
-            LEFT JOIN bookings b ON t.id = b.trip_id
+            FROM batches t
+            LEFT JOIN bookings b ON t.id = b.batch_id
             LEFT JOIN users u ON b.user_id = u.id
             WHERE t.id = $1
             GROUP BY t.id;
@@ -117,7 +117,7 @@ router.get('/batches/:id', authenticateToken, async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(404).json({ 
                 success: false,
-                error: 'Trip not found' 
+                error: 'Batch not found' 
             });
         }
 
