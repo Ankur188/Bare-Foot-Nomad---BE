@@ -4,32 +4,89 @@ import { authenticateToken } from '../middleware/authorization.js';
 
 const router = express.Router();
 
+// GET /api/admin/trips - Get all trips with pagination
+router.get('/trips', authenticateToken, async (req, res) => {
+    try {
+        // Get pagination parameters from query string
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        // Get total count of trips
+        const countQuery = `SELECT COUNT(*) as total FROM trips`;
+        const countResult = await pool.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total);
+
+        // Fetch paginated trips with earliest and latest batch dates
+        const query = `
+            SELECT 
+                t.*,
+                date_agg.earliest_from_date AS from_month,
+                date_agg.latest_to_date AS to_month
+            FROM trips t
+            LEFT JOIN (
+                SELECT 
+                    trip_id,
+                    MIN(from_date) AS earliest_from_date,
+                    MAX(to_date) AS latest_to_date
+                FROM batches
+                GROUP BY trip_id
+            ) date_agg ON date_agg.trip_id = t.id
+            ORDER BY t.destination_name
+            LIMIT $1 OFFSET $2;
+        `;
+
+        const result = await pool.query(query, [limit, offset]);
+        
+        res.json({ 
+            success: true,
+            count: result.rows.length,
+            total: totalCount,
+            page: page,
+            limit: limit,
+            totalPages: Math.ceil(totalCount / limit),
+            trips: result.rows 
+        });
+    } catch (error) {
+        console.error('Error fetching trips:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
 // GET /api/admin/batches - Get all batches with associated users (bookings)
 router.get('/batches', authenticateToken, async (req, res) => {
     try {
-        // Fetch all batches with booking counts and user information
+        // Get pagination parameters from query string
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        // Get total count of batches
+        const countQuery = `SELECT COUNT(DISTINCT ba.id) as total FROM batches ba`;
+        const countResult = await pool.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total);
+
+        // Fetch paginated batches with booking counts and user information
         const query = `
             SELECT 
-                t.id,
-                t.destination_name,
-                t.from_date,
-                t.to_date,
-                t.days,
-                t.nights,
-                t.price,
-                t.desitnations,
-                t.physical_rating,
-                t.description,
-                t.itinerary,
-                t.inclusions,
-                t.excluions,
-                t.single_room,
-                t.double_room,
-                t.triple_room,
-                t.max_adventurers,
-                t.status,
-                t.batch_name,
-                t.tax,
+                ba.id,
+                tr.destination_name,
+                ba.from_date,
+                ba.to_date,
+                ba.days,
+                ba.nights,
+                ba.price,
+                ba.tax,
+                ba.single_room,
+                ba.double_room,
+                ba.triple_room,
+                ba.max_adventurers,
+                ba.status,
+                ba.batch_name,
+                ba.trip_id,
                 COALESCE(
                     json_agg(b.name ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
@@ -38,14 +95,16 @@ router.get('/batches', authenticateToken, async (req, res) => {
                     json_agg(b.travellers ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
                 ) as travellers_array
-            FROM batches t
-            LEFT JOIN bookings b ON t.id = b.batch_id
+            FROM batches ba
+            LEFT JOIN trips tr ON ba.trip_id = tr.id
+            LEFT JOIN bookings b ON ba.id = b.batch_id
             LEFT JOIN users u ON b.user_id = u.id
-            GROUP BY t.id
-            ORDER BY t.from_date DESC, t.destination_name;
+            GROUP BY ba.id, tr.destination_name
+            ORDER BY ba.from_date DESC, tr.destination_name
+            LIMIT $1 OFFSET $2;
         `;
 
-        const result = await pool.query(query);
+        const result = await pool.query(query, [limit, offset]);
         
         // Transform the data to have cleaner structure
         const batches = result.rows.map(trip => {
@@ -62,6 +121,10 @@ router.get('/batches', authenticateToken, async (req, res) => {
         res.json({ 
             success: true,
             count: batches.length,
+            total: totalCount,
+            page: page,
+            limit: limit,
+            totalPages: Math.ceil(totalCount / limit),
             batches: batches 
         });
     } catch (error) {
@@ -80,23 +143,21 @@ router.get('/batches/:id', authenticateToken, async (req, res) => {
         
         const query = `
             SELECT 
-                t.id,
-                t.destination_name,
-                t.from_date,
-                t.to_date,
-                t.days,
-                t.nights,
-                t.price,
-                t.desitnations,
-                t.physical_rating,
-                t.description,
-                t.itinerary,
-                t.inclusions,
-                t.excluions,
-                t.rooms,
-                t.max_adventurers,
-                t.status,
-                t.batch_name,
+                ba.id,
+                tr.destination_name,
+                ba.from_date,
+                ba.to_date,
+                ba.days,
+                ba.nights,
+                ba.price,
+                ba.tax,
+                ba.single_room,
+                ba.double_room,
+                ba.triple_room,
+                ba.max_adventurers,
+                ba.status,
+                ba.batch_name,
+                ba.trip_id,
                 COALESCE(
                     json_agg(b.name ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
@@ -105,11 +166,12 @@ router.get('/batches/:id', authenticateToken, async (req, res) => {
                     json_agg(b.travellers ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
                 ) as travellers_array
-            FROM batches t
-            LEFT JOIN bookings b ON t.id = b.batch_id
+            FROM batches ba
+            LEFT JOIN trips tr ON ba.trip_id = tr.id
+            LEFT JOIN bookings b ON ba.id = b.batch_id
             LEFT JOIN users u ON b.user_id = u.id
-            WHERE t.id = $1
-            GROUP BY t.id;
+            WHERE ba.id = $1
+            GROUP BY ba.id, tr.destination_name;
         `;
 
         const result = await pool.query(query, [tripId]);
