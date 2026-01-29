@@ -205,4 +205,46 @@ router.get('/batches/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/admin/users - Get all users with their associated trips
+router.get('/users', authenticateToken, async (req, res) => {
+    try {
+        // Fetch all users with their associated trips (only destination_name)
+        const query = `
+            SELECT 
+                u.id,
+                u.name,
+                u.email,
+                u.phone_number,
+                u.created_at,
+                u.role,
+                COALESCE(
+                    json_agg(
+                        DISTINCT tr.destination_name
+                    ) FILTER (WHERE tr.destination_name IS NOT NULL),
+                    '[]'
+                ) as trips
+            FROM users u
+            LEFT JOIN bookings b ON u.id = b.user_id
+            LEFT JOIN batches bat ON b.batch_id = bat.id
+            LEFT JOIN trips tr ON bat.trip_id = tr.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC;
+        `;
+
+        const result = await pool.query(query);
+        
+        res.json({ 
+            success: true,
+            count: result.rows.length,
+            users: result.rows 
+        });
+    } catch (error) {
+        console.error('Error fetching users with trips:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
 export default router;
