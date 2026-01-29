@@ -205,10 +205,20 @@ router.get('/batches/:id', authenticateToken, async (req, res) => {
     }
 });
 
-// GET /api/admin/users - Get all users with their associated trips
+// GET /api/admin/users - Get all users with their associated trips with pagination
 router.get('/users', authenticateToken, async (req, res) => {
     try {
-        // Fetch all users with their associated trips (only destination_name)
+        // Get pagination parameters from query string
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        // Get total count of users
+        const countQuery = `SELECT COUNT(*) as total FROM users`;
+        const countResult = await pool.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total);
+
+        // Fetch paginated users with their associated trips (only destination_name)
         const query = `
             SELECT 
                 u.id,
@@ -228,18 +238,69 @@ router.get('/users', authenticateToken, async (req, res) => {
             LEFT JOIN batches bat ON b.batch_id = bat.id
             LEFT JOIN trips tr ON bat.trip_id = tr.id
             GROUP BY u.id
-            ORDER BY u.created_at DESC;
+            ORDER BY u.created_at DESC
+            LIMIT $1 OFFSET $2;
         `;
 
-        const result = await pool.query(query);
+        const result = await pool.query(query, [limit, offset]);
         
         res.json({ 
             success: true,
             count: result.rows.length,
+            total: totalCount,
+            page: page,
+            limit: limit,
+            totalPages: Math.ceil(totalCount / limit),
             users: result.rows 
         });
     } catch (error) {
         console.error('Error fetching users with trips:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
+// GET /api/admin/coupons - Get all coupons with pagination
+router.get('/coupons', authenticateToken, async (req, res) => {
+    try {
+        // Get pagination parameters from query string
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        // Get total count of coupons
+        const countQuery = `SELECT COUNT(*) as total FROM coupons`;
+        const countResult = await pool.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total);
+
+        const query = `
+            SELECT 
+                id,
+                code,
+                deduction,
+                start_date,
+                end_date,
+                status
+            FROM coupons
+            ORDER BY start_date DESC
+            LIMIT $1 OFFSET $2;
+        `;
+
+        const result = await pool.query(query, [limit, offset]);
+        
+        res.json({ 
+            success: true,
+            count: result.rows.length,
+            total: totalCount,
+            page: page,
+            limit: limit,
+            totalPages: Math.ceil(totalCount / limit),
+            coupons: result.rows 
+        });
+    } catch (error) {
+        console.error('Error fetching coupons:', error);
         res.status(500).json({ 
             success: false,
             error: error.message 

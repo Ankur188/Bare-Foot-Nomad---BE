@@ -74,6 +74,16 @@ CREATE TABLE leads (
 )
 
 
+CREATE TABLE coupons (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code TEXT NOT NULL,
+    deduction INT NOT NULL,
+    start_date INT NOT NUll,
+    end_date INT NOT NUll,
+    status BOOLEAN DEFAULT TRUE NOT NULL
+)
+
+
 
 
 
