@@ -1,25 +1,34 @@
 import express from "express";
 import pool from "../db.js";
 import dotenv from "dotenv";
-import fs from "fs";
-import path from "path";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 dotenv.config();
 
 const router = express.Router();
 
-// Helper: look for an image file in public/uploads that matches the key (prefix match)
-const uploadDir = path.join(process.cwd(), "public", "uploads");
-// ensure directory exists (no-op if already present)
-try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (e) {}
+const bucketName = process.env.BUCKET_NAME;
+const bucketRegion = process.env.BUCKET_REGION;
+const accessKey = process.env.ACCESS_KEY;
+const secretAccessKey = process.env.SECRET_ACCESS_KEY;
 
-async function getTripSignedUrl(key, req) {
-  // Find a file whose name starts with the key (case-insensitive)
-  const files = fs.existsSync(uploadDir) ? fs.readdirSync(uploadDir) : [];
-  const match = files.find((f) => f.toLowerCase().startsWith(String(key).toLowerCase()));
-  if (!match) return null;
-  return `${req.protocol}://${req.get('host')}/uploads/${match}`;
+const s3 = new S3Client({
+  credentials: {
+    accessKeyId: accessKey,
+    secretAccessKey: secretAccessKey,
+  },
+  region: bucketRegion,
+});
+
+async function getTripSignedUrl(bucketName, key) {
+  const command = new GetObjectCommand({
+    Bucket: bucketName,
+    Key: key, // exact S3 key
+  });
+  return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
 }
+
 
 // Route to get all trips with earliest and latest batch dates
 router.get("/", async (req, res) => {
@@ -99,6 +108,7 @@ router.get("/", async (req, res) => {
           trip[key] = row[key];
         }
       }
+      
 
       // Add the nested batch object and date range
       trip.lowestPriceBatch = lowestPriceBatch;
@@ -111,8 +121,10 @@ router.get("/", async (req, res) => {
     // Attach presigned image URL to each trip
     for (const trip of trips) {
       try {
-        // Resolve local image URL for the trip (from public/uploads)
-        trip.imageUrl = await getTripSignedUrl(trip.destination_name, req);
+        trip.imageUrl = await getTripSignedUrl(
+          bucketName,
+          trip.destination_name
+        );
       } catch (err) {
         console.error(
           "Failed to generate signed URL for",
