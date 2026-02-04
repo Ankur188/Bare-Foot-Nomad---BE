@@ -83,6 +83,15 @@ CREATE TABLE coupons (
     status BOOLEAN DEFAULT TRUE NOT NULL
 )
 
+CREATE TABLE banners (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    banner_name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at BIGINT NOT NULL
+)
+
+
 
 
 

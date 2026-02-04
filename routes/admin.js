@@ -308,4 +308,34 @@ router.get('/coupons', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/admin/banners - Get all banners
+router.get('/banners', authenticateToken, async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                id,
+                banner_name,
+                description,
+                status,
+                created_at
+            FROM banners
+            ORDER BY created_at DESC;
+        `;
+
+        const result = await pool.query(query);
+        
+        res.json({ 
+            success: true,
+            count: result.rows.length,
+            banners: result.rows 
+        });
+    } catch (error) {
+        console.error('Error fetching banners:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
 export default router;
