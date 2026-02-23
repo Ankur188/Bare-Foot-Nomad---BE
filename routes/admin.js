@@ -11,10 +11,17 @@ router.get('/trips', authenticateToken, async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
+        const search = req.query.search;
+
+        // Build WHERE clause for search
+        const whereClause = search ? `WHERE destination_name ILIKE $1` : '';
+        const searchParam = search ? `%${search}%` : null;
 
         // Get total count of trips
-        const countQuery = `SELECT COUNT(*) as total FROM trips`;
-        const countResult = await pool.query(countQuery);
+        const countQuery = `SELECT COUNT(*) as total FROM trips ${whereClause}`;
+        const countResult = search 
+            ? await pool.query(countQuery, [searchParam])
+            : await pool.query(countQuery);
         const totalCount = parseInt(countResult.rows[0].total);
 
         // Fetch paginated trips with earliest and latest batch dates
@@ -32,11 +39,14 @@ router.get('/trips', authenticateToken, async (req, res) => {
                 FROM batches
                 GROUP BY trip_id
             ) date_agg ON date_agg.trip_id = t.id
+            ${whereClause}
             ORDER BY t.destination_name
-            LIMIT $1 OFFSET $2;
+            LIMIT $${search ? 2 : 1} OFFSET $${search ? 3 : 2};
         `;
 
-        const result = await pool.query(query, [limit, offset]);
+        const result = search
+            ? await pool.query(query, [searchParam, limit, offset])
+            : await pool.query(query, [limit, offset]);
         
         res.json({ 
             success: true,
