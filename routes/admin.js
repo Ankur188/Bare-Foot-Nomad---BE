@@ -1,8 +1,31 @@
 import express from 'express';
 import pool from '../db.js';
 import { authenticateToken } from '../middleware/authorization.js';
+import multer from 'multer';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import crypto from 'crypto';
 
 const router = express.Router();
+
+// Configure multer for file uploads (memory storage for S3)
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// Configure S3 client
+const bucketName = process.env.BUCKET_NAME;
+const bucketRegion = process.env.BUCKET_REGION;
+const accessKey = process.env.ACCESS_KEY;
+const secretAccessKey = process.env.SECRET_ACCESS_KEY;
+
+const s3 = new S3Client({
+  credentials: {
+    accessKeyId: accessKey,
+    secretAccessKey: secretAccessKey,
+  },
+  region: bucketRegion,
+});
+
+const randomImageName = (bytes = 32) => crypto.randomBytes(bytes).toString('hex');
 
 // GET /api/admin/trips - Get all trips with pagination
 router.get('/trips', authenticateToken, async (req, res) => {
@@ -62,6 +85,124 @@ router.get('/trips', authenticateToken, async (req, res) => {
         res.status(500).json({ 
             success: false,
             error: error.message 
+        });
+    }
+});
+
+// POST /api/admin/trips - Create a new trip
+router.post('/trips', authenticateToken, upload.fields([
+    { name: 'images', maxCount: 8 },
+    { name: 'itinerary', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { name, description, numberOfDays, daysData } = req.body;
+        
+        // Validate required fields
+        if (!name || !description || !numberOfDays || !daysData) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: name, description, numberOfDays, daysData'
+            });
+        }
+
+        // Validate files
+        if (!req.files || !req.files.images || req.files.images.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'At least one image is required'
+            });
+        }
+
+        if (!req.files.itinerary || req.files.itinerary.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Itinerary file is required'
+            });
+        }
+
+        // Upload itinerary file to S3
+        const itineraryFile = req.files.itinerary[0];
+        const itineraryKey = `itineraries/${randomImageName()}-${itineraryFile.originalname}`;
+        const itineraryParams = {
+            Bucket: bucketName,
+            Key: itineraryKey,
+            Body: itineraryFile.buffer,
+            ContentType: itineraryFile.mimetype,
+        };
+        await s3.send(new PutObjectCommand(itineraryParams));
+
+        // Upload images to S3
+        const imageKeys = [];
+        for (const image of req.files.images) {
+            const imageKey = `trips/${randomImageName()}`;
+            const imageParams = {
+                Bucket: bucketName,
+                Key: imageKey,
+                Body: image.buffer,
+                ContentType: image.mimetype,
+            };
+            await s3.send(new PutObjectCommand(imageParams));
+            imageKeys.push(imageKey);
+        }
+
+        // Parse daysData JSON (it comes as string from FormData)
+        let parsedDaysData;
+        try {
+            parsedDaysData = JSON.parse(daysData);
+        } catch (e) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid daysData JSON format'
+            });
+        }
+
+        // Prepare itinerary text from daysData
+        let itineraryText = '';
+        for (let i = 1; i <= parseInt(numberOfDays); i++) {
+            const day = parsedDaysData[i.toString()];
+            if (day) {
+                itineraryText += `Day ${i}: ${day.title}\n${day.content}\n\n`;
+            }
+        }
+
+        // Insert trip into database
+        const insertQuery = `
+            INSERT INTO trips (
+                destination_name,
+                description,
+                itinerary,
+                desitnations,
+                physical_rating,
+                inclusions,
+                excluions,
+                status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING *;
+        `;
+
+        const result = await pool.query(insertQuery, [
+            name,
+            description,
+            itineraryText || itineraryKey, // Store either formatted text or file key
+            imageKeys.join(','), // Store image keys as comma-separated string
+            3, // Default physical rating
+            '', // Default inclusions (can be added to form later)
+            '', // Default exclusions (can be added to form later)
+            true // Active by default
+        ]);
+
+        res.status(201).json({
+            success: true,
+            message: 'Trip created successfully',
+            trip: result.rows[0],
+            imageKeys: imageKeys,
+            itineraryKey: itineraryKey
+        });
+    } catch (error) {
+        console.error('Error creating trip:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
