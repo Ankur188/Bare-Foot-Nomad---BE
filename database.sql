@@ -19,7 +19,9 @@ CREATE TABLE trips (
     itinerary TEXT NOT NULL,
     inclusions TEXT NOT NULL,
     excluions TEXT NOT NULL,
-    status BOOLEAN DEFAULT TRUE NOT NULL,
+    days INT NOT NULL,
+    nights INT NOT NULL,
+    status BOOLEAN DEFAULT TRUE NOT NULL
 );
 
 
