@@ -24,8 +24,6 @@ router.get('/', authenticateToken, async (req, res) => {
                 tr.destination_name,
                 ba.from_date,
                 ba.to_date,
-                ba.days,
-                ba.nights,
                 ba.price,
                 ba.tax,
                 ba.single_room,
@@ -95,8 +93,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
                 tr.destination_name,
                 ba.from_date,
                 ba.to_date,
-                ba.days,
-                ba.nights,
                 ba.price,
                 ba.tax,
                 ba.single_room,
@@ -149,6 +145,102 @@ router.get('/:id', authenticateToken, async (req, res) => {
         res.status(500).json({ 
             success: false,
             error: error.message 
+        });
+    }
+});
+
+// POST /api/admin/batches - Create a new batch
+router.post('/', authenticateToken, async (req, res) => {
+    try {
+        const { 
+            batchName, 
+            assignedTrip, 
+            startDate, 
+            endDate, 
+            standardPrice, 
+            singleRoom, 
+            doubleRoom, 
+            tripleRoom, 
+            tax, 
+            maxAdventurers,
+            createdAt,
+            status 
+        } = req.body;
+        
+        // Validate required fields
+        if (!batchName || !assignedTrip || !startDate || !endDate || !standardPrice || 
+            tripleRoom === undefined || tax === undefined || !maxAdventurers) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: batchName, assignedTrip, startDate, endDate, standardPrice, tripleRoom, tax, maxAdventurers'
+            });
+        }
+
+        // Validate dates
+        const fromDate = parseInt(startDate);
+        const toDate = parseInt(endDate);
+        if (toDate <= fromDate) {
+            return res.status(400).json({
+                success: false,
+                error: 'End date must be after start date'
+            });
+        }
+
+        // Check if batch with same name already exists
+        const existingBatchQuery = 'SELECT id FROM batches WHERE batch_name = $1';
+        const existingBatch = await pool.query(existingBatchQuery, [batchName]);
+        
+        if (existingBatch.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Batch already exists with this name'
+            });
+        }
+
+        // Insert batch into database
+        const insertQuery = `
+            INSERT INTO batches (
+                batch_name,
+                trip_id,
+                from_date,
+                to_date,
+                price,
+                single_room,
+                double_room,
+                triple_room,
+                tax,
+                max_adventurers,
+                created_at,
+                status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING *;
+        `;
+
+        const result = await pool.query(insertQuery, [
+            batchName,
+            assignedTrip,
+            fromDate,
+            toDate,
+            parseInt(standardPrice),
+            parseInt(singleRoom) || 0,
+            parseInt(doubleRoom) || 0,
+            parseInt(tripleRoom),
+            parseInt(tax),
+            parseInt(maxAdventurers),
+            createdAt || Math.floor(new Date().getTime() / 1000), // Use provided timestamp or current time (in seconds)
+            status !== undefined ? status : true // Active by default
+        ]);
+
+        res.status(201).json({
+            success: true,
+            message: 'Batch created successfully',
+            batch: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error creating batch:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });

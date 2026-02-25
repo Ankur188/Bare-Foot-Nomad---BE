@@ -34,6 +34,7 @@ CREATE TABLE batches (
     days INT NOT NULL,
     nights INT NOT NULL,
     price INT NOT NUll,
+    tax INT NOT NULL DEFAULT 0,
     max_adventurers INT NOT NUll,
     status BOOLEAN DEFAULT TRUE NOT NULL,
     batch_name TEXT NOT NULL,
