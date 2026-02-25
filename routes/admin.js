@@ -89,6 +89,50 @@ router.get('/trips', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/admin/trips/:id - Get a specific trip by ID
+router.get('/trips/:id', authenticateToken, async (req, res) => {
+    try {
+        const tripId = req.params.id;
+
+        const query = `
+            SELECT 
+                t.*,
+                date_agg.earliest_from_date AS from_month,
+                date_agg.latest_to_date AS to_month
+            FROM trips t
+            LEFT JOIN (
+                SELECT 
+                    trip_id,
+                    MIN(from_date) AS earliest_from_date,
+                    MAX(to_date) AS latest_to_date
+                FROM batches
+                GROUP BY trip_id
+            ) date_agg ON date_agg.trip_id = t.id
+            WHERE t.id = $1;
+        `;
+
+        const result = await pool.query(query, [tripId]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Trip not found' 
+            });
+        }
+
+        res.json({ 
+            success: true,
+            trip: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error fetching trip details:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
 // POST /api/admin/trips - Create a new trip
 router.post('/trips', authenticateToken, upload.fields([
     { name: 'images', maxCount: 8 },
