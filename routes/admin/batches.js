@@ -380,4 +380,48 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// DELETE /api/admin/batches/:id - Delete a batch
+router.delete('/:id', authenticateToken, async (req, res) => {
+    try {
+        const batchId = req.params.id;
+
+        // Check if batch exists
+        const checkQuery = 'SELECT id FROM batches WHERE id = $1';
+        const checkResult = await pool.query(checkQuery, [batchId]);
+
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Batch not found'
+            });
+        }
+
+        // Check if batch has associated bookings
+        const bookingsQuery = 'SELECT id FROM bookings WHERE batch_id = $1 LIMIT 1';
+        const bookingsResult = await pool.query(bookingsQuery, [batchId]);
+
+        if (bookingsResult.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot delete batch with associated bookings/users'
+            });
+        }
+
+        // Delete the batch
+        const deleteQuery = 'DELETE FROM batches WHERE id = $1';
+        await pool.query(deleteQuery, [batchId]);
+
+        res.json({
+            success: true,
+            message: 'Batch deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting batch:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 export default router;
