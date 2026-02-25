@@ -245,4 +245,139 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// PUT /api/admin/batches/:id - Update an existing batch
+router.put('/:id', authenticateToken, async (req, res) => {
+    try {
+        const batchId = req.params.id;
+        const { 
+            batchName, 
+            assignedTrip, 
+            startDate, 
+            endDate, 
+            standardPrice, 
+            singleRoom, 
+            doubleRoom, 
+            tripleRoom, 
+            tax, 
+            maxAdventurers,
+            status 
+        } = req.body;
+        
+        // Check if batch exists
+        const existingBatchQuery = 'SELECT id FROM batches WHERE id = $1';
+        const existingBatch = await pool.query(existingBatchQuery, [batchId]);
+        
+        if (existingBatch.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Batch not found'
+            });
+        }
+
+        // Validate dates if provided
+        if (startDate && endDate) {
+            const fromDate = parseInt(startDate);
+            const toDate = parseInt(endDate);
+            if (toDate <= fromDate) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'End date must be after start date'
+                });
+            }
+        }
+
+        // Build dynamic update query
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+
+        if (batchName !== undefined) {
+            updates.push(`batch_name = $${paramCount}`);
+            values.push(batchName);
+            paramCount++;
+        }
+        if (assignedTrip !== undefined) {
+            updates.push(`trip_id = $${paramCount}`);
+            values.push(assignedTrip);
+            paramCount++;
+        }
+        if (startDate !== undefined) {
+            updates.push(`from_date = $${paramCount}`);
+            values.push(parseInt(startDate));
+            paramCount++;
+        }
+        if (endDate !== undefined) {
+            updates.push(`to_date = $${paramCount}`);
+            values.push(parseInt(endDate));
+            paramCount++;
+        }
+        if (standardPrice !== undefined) {
+            updates.push(`price = $${paramCount}`);
+            values.push(parseInt(standardPrice));
+            paramCount++;
+        }
+        if (singleRoom !== undefined) {
+            updates.push(`single_room = $${paramCount}`);
+            values.push(parseInt(singleRoom));
+            paramCount++;
+        }
+        if (doubleRoom !== undefined) {
+            updates.push(`double_room = $${paramCount}`);
+            values.push(parseInt(doubleRoom));
+            paramCount++;
+        }
+        if (tripleRoom !== undefined) {
+            updates.push(`triple_room = $${paramCount}`);
+            values.push(parseInt(tripleRoom));
+            paramCount++;
+        }
+        if (tax !== undefined) {
+            updates.push(`tax = $${paramCount}`);
+            values.push(parseInt(tax));
+            paramCount++;
+        }
+        if (maxAdventurers !== undefined) {
+            updates.push(`max_adventurers = $${paramCount}`);
+            values.push(parseInt(maxAdventurers));
+            paramCount++;
+        }
+        if (status !== undefined) {
+            updates.push(`status = $${paramCount}`);
+            values.push(status);
+            paramCount++;
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No fields to update'
+            });
+        }
+
+        // Add batch ID as the last parameter
+        values.push(batchId);
+
+        const updateQuery = `
+            UPDATE batches 
+            SET ${updates.join(', ')}
+            WHERE id = $${paramCount}
+            RETURNING *;
+        `;
+
+        const result = await pool.query(updateQuery, values);
+
+        res.json({
+            success: true,
+            message: 'Batch updated successfully',
+            batch: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error updating batch:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 export default router;
