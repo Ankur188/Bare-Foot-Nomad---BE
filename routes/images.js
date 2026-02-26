@@ -54,9 +54,17 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 router.get("/banner", async (req, res) => {
   try {
     const name = req.query.name;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Banner name is required' });
+    }
+    
+    // Add 'banners/' prefix if not already present
+    const s3Key = name.startsWith('banners/') ? name : `banners/${name}`;
+    
     const getObjectParams = {
       Bucket: bucketName,
-      Key: name,
+      Key: s3Key,
     };
     const command = new GetObjectCommand(getObjectParams);
     const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
