@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../../db.js';
 import { authenticateToken } from '../../middleware/authorization.js';
+import bcrypt from 'bcrypt';
 
 const router = express.Router();
 
@@ -57,6 +58,87 @@ router.get('/', authenticateToken, async (req, res) => {
         res.status(500).json({ 
             success: false,
             error: error.message 
+        });
+    }
+});
+
+// POST /api/admin/users - Create a new user
+router.post('/', authenticateToken, async (req, res) => {
+    try {
+        const { name, email, phoneNumber, role, password } = req.body;
+
+        // Validate required fields
+        if (!name || !email || !phoneNumber || !role) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: name, email, phoneNumber, and role are required'
+            });
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid email format'
+            });
+        }
+
+        // Validate phone number (should be numeric and 10 digits)
+        if (!/^\d{10}$/.test(phoneNumber.toString())) {
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number must be exactly 10 digits'
+            });
+        }
+
+        // Check if user with this email already exists
+        const existingUserQuery = 'SELECT id FROM users WHERE email = $1';
+        const existingUser = await pool.query(existingUserQuery, [email]);
+
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                error: 'User with this email already exists'
+            });
+        }
+
+        // Generate default password if not provided (email without @ and domain)
+        const defaultPassword = password || email.split('@')[0];
+        
+        // Hash the password
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);
+
+        // Get current timestamp
+        const createdAt = Math.floor(Date.now() / 1000);
+
+        // Insert new user
+        const insertQuery = `
+            INSERT INTO users (name, email, password, phone_number, created_at, role)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, name, email, phone_number, created_at, role;
+        `;
+
+        const result = await pool.query(insertQuery, [
+            name,
+            email,
+            hashedPassword,
+            parseInt(phoneNumber),
+            createdAt,
+            role
+        ]);
+
+        res.status(201).json({
+            success: true,
+            message: 'User created successfully',
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
         });
     }
 });
