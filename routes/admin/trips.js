@@ -245,8 +245,9 @@ router.post('/', authenticateToken, upload.fields([
                     nights,
                     inclusions,
                     excluions,
-                    status
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    status,
+                    images
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 RETURNING *;
             `;
 
@@ -260,7 +261,8 @@ router.post('/', authenticateToken, upload.fields([
                 parseInt(nights), // Nights from form
                 '', // Default inclusions (can be added to form later)
                 '', // Default exclusions (can be added to form later)
-                true // Active by default
+                true, // Active by default
+                imageKeys.length // Number of images uploaded
             ]);
 
             res.status(201).json({
@@ -291,6 +293,67 @@ router.post('/', authenticateToken, upload.fields([
         }
     } catch (error) {
         console.error('Error creating trip:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// PUT /api/admin/trips/:id - Update an existing trip
+router.put('/:id', authenticateToken, async (req, res) => {
+    try {
+        const tripId = req.params.id;
+        const { status } = req.body;
+        
+        // Check if trip exists
+        const existingTripQuery = 'SELECT id FROM trips WHERE id = $1';
+        const existingTrip = await pool.query(existingTripQuery, [tripId]);
+        
+        if (existingTrip.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Trip not found'
+            });
+        }
+
+        // Build dynamic update query
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+
+        if (status !== undefined) {
+            updates.push(`status = $${paramCount}`);
+            values.push(status);
+            paramCount++;
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No fields to update'
+            });
+        }
+
+        // Add trip ID as the last parameter
+        values.push(tripId);
+
+        const updateQuery = `
+            UPDATE trips 
+            SET ${updates.join(', ')}
+            WHERE id = $${paramCount}
+            RETURNING *;
+        `;
+
+        const result = await pool.query(updateQuery, values);
+
+        res.json({
+            success: true,
+            message: 'Trip updated successfully',
+            trip: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error updating trip:', error);
         res.status(500).json({
             success: false,
             error: error.message
