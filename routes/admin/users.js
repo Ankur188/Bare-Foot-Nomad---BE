@@ -143,4 +143,50 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// DELETE /api/admin/users/:id - Delete a user
+router.delete('/:id', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        // Check if user exists
+        const existingUserQuery = 'SELECT id, name FROM users WHERE id = $1';
+        const existingUser = await pool.query(existingUserQuery, [userId]);
+
+        if (existingUser.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        // Check if user has any bookings
+        const bookingsQuery = 'SELECT COUNT(*) as count FROM bookings WHERE user_id = $1';
+        const bookingsResult = await pool.query(bookingsQuery, [userId]);
+        const bookingCount = parseInt(bookingsResult.rows[0].count);
+
+        if (bookingCount > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot delete user with existing bookings'
+            });
+        }
+
+        // Delete the user
+        const deleteQuery = 'DELETE FROM users WHERE id = $1 RETURNING *';
+        const result = await pool.query(deleteQuery, [userId]);
+
+        res.json({
+            success: true,
+            message: 'User deleted successfully',
+            deletedUser: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 export default router;
