@@ -4,6 +4,59 @@ import { authenticateToken } from '../../middleware/authorization.js';
 
 const router = express.Router();
 
+// POST /api/admin/coupons - Create a new coupon
+router.post('/', authenticateToken, async (req, res) => {
+    try {
+        const { couponCode, deduction, startDate, endDate } = req.body;
+
+        // Validate required fields
+        if (!couponCode || !deduction || !startDate || !endDate) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: couponCode, deduction, startDate, endDate'
+            });
+        }
+
+        // Check if coupon code already exists
+        const existingCouponQuery = 'SELECT id FROM coupons WHERE code = $1';
+        const existingCoupon = await pool.query(existingCouponQuery, [couponCode]);
+
+        if (existingCoupon.rows.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Coupon code already exists'
+            });
+        }
+
+        // Insert new coupon
+        const insertQuery = `
+            INSERT INTO coupons (code, deduction, start_date, end_date, status)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING *;
+        `;
+
+        const result = await pool.query(insertQuery, [
+            couponCode,
+            parseFloat(deduction),
+            parseInt(startDate),
+            parseInt(endDate),
+            true // status defaults to active
+        ]);
+
+        res.status(201).json({
+            success: true,
+            message: 'Coupon created successfully',
+            coupon: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error creating coupon:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 // GET /api/admin/coupons - Get all coupons with pagination
 router.get('/', authenticateToken, async (req, res) => {
     try {
@@ -161,6 +214,40 @@ router.put('/:id', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Error updating coupon:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// DELETE /api/admin/coupons/:id - Delete a coupon
+router.delete('/:id', authenticateToken, async (req, res) => {
+    try {
+        const couponId = req.params.id;
+
+        // Check if coupon exists
+        const existingCouponQuery = 'SELECT id, code FROM coupons WHERE id = $1';
+        const existingCoupon = await pool.query(existingCouponQuery, [couponId]);
+
+        if (existingCoupon.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Coupon not found'
+            });
+        }
+
+        // Delete the coupon
+        const deleteQuery = 'DELETE FROM coupons WHERE id = $1 RETURNING *';
+        const result = await pool.query(deleteQuery, [couponId]);
+
+        res.json({
+            success: true,
+            message: 'Coupon deleted successfully',
+            deletedCoupon: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error deleting coupon:', error);
         res.status(500).json({
             success: false,
             error: error.message
