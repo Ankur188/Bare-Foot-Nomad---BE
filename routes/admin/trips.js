@@ -233,6 +233,12 @@ router.post('/', authenticateToken, upload.fields([
                 }
             }
 
+            // Handle days field - if it's JSON, store as-is; otherwise store the value
+            let daysValue = days;
+            if (typeof days === 'object') {
+                daysValue = JSON.stringify(days);
+            }
+
             // Insert trip into database
             const insertQuery = `
                 INSERT INTO trips (
@@ -257,7 +263,7 @@ router.post('/', authenticateToken, upload.fields([
                 itineraryText || itineraryKey, // Store either formatted text or file key
                 destinations, // Store destinations from form
                 parseInt(physicalRating), // Physical rating from form
-                parseInt(days), // Days from form
+                daysValue, // Days stored as-is (string or JSON string)
                 parseInt(nights), // Nights from form
                 '', // Default inclusions (can be added to form later)
                 '', // Default exclusions (can be added to form later)
@@ -304,7 +310,7 @@ router.post('/', authenticateToken, upload.fields([
 router.put('/:id', authenticateToken, async (req, res) => {
     try {
         const tripId = req.params.id;
-        const { status } = req.body;
+        const { status, name, description, days, nights, destinations, physicalRating, daysData } = req.body;
         
         // Check if trip exists
         const existingTripQuery = 'SELECT id FROM trips WHERE id = $1';
@@ -317,6 +323,19 @@ router.put('/:id', authenticateToken, async (req, res) => {
             });
         }
 
+        // If name is being updated, check if another trip (with different ID) has the same name
+        if (name !== undefined) {
+            const duplicateNameQuery = 'SELECT id FROM trips WHERE destination_name = $1 AND id != $2';
+            const duplicateTrip = await pool.query(duplicateNameQuery, [name, tripId]);
+            
+            if (duplicateTrip.rows.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Another trip already exists with this destination name'
+                });
+            }
+        }
+
         // Build dynamic update query
         const updates = [];
         const values = [];
@@ -325,6 +344,53 @@ router.put('/:id', authenticateToken, async (req, res) => {
         if (status !== undefined) {
             updates.push(`status = $${paramCount}`);
             values.push(status);
+            paramCount++;
+        }
+
+        if (name !== undefined) {
+            updates.push(`destination_name = $${paramCount}`);
+            values.push(name);
+            paramCount++;
+        }
+
+        if (description !== undefined) {
+            updates.push(`description = $${paramCount}`);
+            values.push(description);
+            paramCount++;
+        }
+
+        if (days !== undefined) {
+            updates.push(`days = $${paramCount}`);
+            // Handle days field - if it's JSON, store as-is; otherwise store the value
+            let daysValue = days;
+            if (typeof days === 'object') {
+                daysValue = JSON.stringify(days);
+            }
+            values.push(daysValue);
+            paramCount++;
+        }
+
+        if (nights !== undefined) {
+            updates.push(`nights = $${paramCount}`);
+            values.push(parseInt(nights));
+            paramCount++;
+        }
+
+        if (destinations !== undefined) {
+            updates.push(`desitnations = $${paramCount}`);
+            values.push(destinations);
+            paramCount++;
+        }
+
+        if (physicalRating !== undefined) {
+            updates.push(`physical_rating = $${paramCount}`);
+            values.push(parseInt(physicalRating));
+            paramCount++;
+        }
+
+        if (daysData !== undefined) {
+            updates.push(`itinerary = $${paramCount}`);
+            values.push(daysData);
             paramCount++;
         }
 
