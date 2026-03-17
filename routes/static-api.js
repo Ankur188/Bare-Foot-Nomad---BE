@@ -142,7 +142,7 @@ router.post("/enquire", async (req, res) => {
   try {
     // console.log('req', req.body)
     await pool.query(
-      "insert into leads (type, name , location, travellers, days, email, phone, message, budget) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+      "insert into leads (type, name , location, travellers, days, email, phone, message, budget, date, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
       [
         req.body.type,
         req.body.name,
@@ -153,6 +153,8 @@ router.post("/enquire", async (req, res) => {
         req.body.phone,
         req.body.message,
         req.body.budget,
+        req.body.date,
+        req.body.createdAt,
       ]
     );
     res.json({ message: "Successful" });

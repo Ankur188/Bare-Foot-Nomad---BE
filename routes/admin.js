@@ -4,6 +4,7 @@ import batchesRouter from './admin/batches.js';
 import usersRouter from './admin/users.js';
 import couponsRouter from './admin/coupons.js';
 import bannersRouter from './admin/banners.js';
+import leadsRouter from './admin/leads.js';
 
 const router = express.Router();
 
@@ -13,5 +14,6 @@ router.use('/batches', batchesRouter);
 router.use('/users', usersRouter);
 router.use('/coupons', couponsRouter);
 router.use('/banners', bannersRouter);
+router.use('/leads', leadsRouter);
 
 export default router;
