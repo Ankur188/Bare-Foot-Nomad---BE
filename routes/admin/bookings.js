@@ -2,7 +2,8 @@ import express from 'express';
 import pool from '../../db.js';
 import { authenticateToken } from '../../middleware/authorization.js';
 import multer from 'multer';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 
 const router = express.Router();
@@ -626,6 +627,75 @@ router.delete('/:id', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('Error deleting booking:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
+// GET /api/admin/bookings/:id/invoice - Get download URL for booking invoice
+router.get('/:id/invoice', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Check if booking exists
+        const checkQuery = 'SELECT id FROM bookings WHERE id = $1';
+        const checkResult = await pool.query(checkQuery, [id]);
+        
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Booking not found' 
+            });
+        }
+
+        // Find the invoice file in S3
+        try {
+            const listParams = {
+                Bucket: bucketName,
+                Prefix: `${id}.`
+            };
+            
+            const listCommand = new ListObjectsV2Command(listParams);
+            const listResult = await s3.send(listCommand);
+            
+            if (!listResult.Contents || listResult.Contents.length === 0) {
+                return res.status(404).json({ 
+                    success: false,
+                    error: 'Invoice file not found' 
+                });
+            }
+
+            // Get the first matching file (should only be one)
+            const invoiceKey = listResult.Contents[0].Key;
+            
+            // Extract filename from key
+            const filename = invoiceKey?.split('/').pop() || `invoice-${id}.pdf`;
+            
+            // Generate a signed URL that expires in 5 minutes with download disposition
+            const command = new GetObjectCommand({
+                Bucket: bucketName,
+                Key: invoiceKey,
+                ResponseContentDisposition: `attachment; filename="${filename}"`
+            });
+            
+            const signedUrl = await getSignedUrl(s3, command, { expiresIn: 300 });
+            
+            res.json({ 
+                success: true,
+                downloadUrl: signedUrl,
+                filename: filename
+            });
+        } catch (s3Error) {
+            console.error('Error getting invoice from S3:', s3Error);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to retrieve invoice file'
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching invoice:', error);
         res.status(500).json({ 
             success: false,
             error: error.message 
