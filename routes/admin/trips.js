@@ -245,7 +245,7 @@ router.post('/', authenticateToken, upload.fields([
                     destination_name,
                     description,
                     itinerary,
-                    desitnations,
+                    destinations,
                     physical_rating,
                     days,
                     nights,
@@ -377,7 +377,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
         }
 
         if (destinations !== undefined) {
-            updates.push(`desitnations = $${paramCount}`);
+            updates.push(`destinations = $${paramCount}`);
             values.push(destinations);
             paramCount++;
         }

@@ -13,7 +13,7 @@ CREATE TABLE users (
 CREATE TABLE trips (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     destination_name TEXT NOT NULL,
-    desitnations TEXT NOT NULL,
+    destinations TEXT NOT NULL,
     physical_rating INT NOT NULL,
     description TEXT NOT NULL,
     itinerary TEXT NOT NULL,
@@ -105,7 +105,7 @@ Insert into users (category, destination, from_date, to_date, days, nights) valu
 
 
 
-Insert into trips (destination_name, desitnations, physical_rating, description, itinerary, inclusions, excluions) values ('Spiti Valley', 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
+Insert into trips (destination_name, destinations, physical_rating, description, itinerary, inclusions, excluions) values ('Spiti Valley', 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
 '{
    "1":{
       "title":"Drive from Delhi to Manali (530 Kilometers, 13 Hours)",
@@ -125,7 +125,7 @@ Insert into trips (destination_name, desitnations, physical_rating, description,
    }
 }', '', '');
 
- Insert into trips (destination_name, from_date, to_date, days, nights, price, desitnations, physical_rating, description, itinerary, inclusions, excluions, rooms, max_adventurers) values ('Spiti Valley', 1755347701, 1739177352, 8, 7, 9400, 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
+ Insert into trips (destination_name, from_date, to_date, days, nights, price, destinations, physical_rating, description, itinerary, inclusions, excluions, rooms, max_adventurers) values ('Spiti Valley', 1755347701, 1739177352, 8, 7, 9400, 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
 '{
     1: {
         title: "Drive from Delhi to Manali (530 Kilometers, 13 Hours)",
@@ -145,7 +145,7 @@ Insert into trips (destination_name, desitnations, physical_rating, description,
     }
  }', '', '', 'triple, double, single', 14);
 
- Insert into trips (destination_name, from_date, to_date, days, nights, price, desitnations, physical_rating, description, itinerary, inclusions, excluions, rooms, max_adventurers) values ('Spiti Valley', 1741164552, 1741596552, 8, 7, 11400, 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
+ Insert into trips (destination_name, from_date, to_date, days, nights, price, destinations, physical_rating, description, itinerary, inclusions, excluions, rooms, max_adventurers) values ('Spiti Valley', 1741164552, 1741596552, 8, 7, 11400, 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
 '{
     1: {
         title: "Drive from Delhi to Manali (530 Kilometers, 13 Hours)",
@@ -165,7 +165,7 @@ Insert into trips (destination_name, desitnations, physical_rating, description,
     }
  }', '', '', 'triple, double, single', 14);
 
- Insert into trips (destination_name, from_date, to_date, days, nights, price, desitnations, physical_rating, description, itinerary, inclusions, excluions, rooms, max_adventurers) values ('Spiti Valley', 1743842952, 1744274952, 8, 7, 13400, 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
+ Insert into trips (destination_name, from_date, to_date, days, nights, price, destinations, physical_rating, description, itinerary, inclusions, excluions, rooms, max_adventurers) values ('Spiti Valley', 1743842952, 1744274952, 8, 7, 13400, 'delhi, kashmir, gulmarg, pahalgam, betab valley, dal lake, delhi', 4, 'Embark on an unforgettable journey with our Kashmir Tour Packages, where you’ll experience the region’s rich culture and breathtaking landscapes. From serene Shikara rides on the tranquil lakes under the moonlit sky, to exploring the traditional markets filled with handcrafted treasures, Kashmir offers a perfect blend of natural beauty and local charm. Enjoy the crisp mountain air in Pahalgam, surrounded by stunning valleys, or have fun in the snow-covered Gulmarg, with incredible views from the Gondola ride. The spiritual side of Kashmir awaits with its intricate mosques and ancient shrines, adding a sense of wonder to your journey.', 
 '{
     1: {
         title: "Drive from Delhi to Manali (530 Kilometers, 13 Hours)",

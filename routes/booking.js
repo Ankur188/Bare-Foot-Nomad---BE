@@ -31,7 +31,7 @@ router.get('/', authenticateToken, async (req, res) => {
                     batch.status as batch_status,
                     t.id as trip_id,
                     t.destination_name,
-                    t.desitnations,
+                    t.destinations,
                     t.physical_rating,
                     t.description,
                     t.itinerary,
@@ -65,7 +65,7 @@ router.get('/', authenticateToken, async (req, res) => {
                     batch.status as batch_status,
                     t.id as trip_id,
                     t.destination_name,
-                    t.desitnations,
+                    t.destinations,
                     t.physical_rating,
                     t.description,
                     t.itinerary,
@@ -111,7 +111,7 @@ router.get('/', authenticateToken, async (req, res) => {
                 trip: row.trip_id ? {
                     id: row.trip_id,
                     destination_name: row.destination_name,
-                    desitnations: row.desitnations,
+                    destinations: row.destinations,
                     physical_rating: row.physical_rating,
                     description: row.description,
                     itinerary: row.itinerary,
@@ -151,6 +151,112 @@ router.post('/', authenticateToken, async (req, res) => {
         res.status(500).json({error: error.message});
     }
 })
+
+// POST /api/booking/validate-coupon - Validate a coupon code
+router.post('/validate-coupon', authenticateToken, async (req, res) => {
+    try {
+        const { couponCode } = req.body;
+
+        if (!couponCode || !couponCode.trim()) {
+            console.log('❌ Coupon validation failed: Coupon code is required');
+            return res.status(400).json({
+                success: false,
+                error: 'Coupon code is required'
+            });
+        }
+
+        console.log(`🔍 Validating coupon code: "${couponCode}"`);
+
+        // Get coupon from database
+        const query = `
+            SELECT 
+                id,
+                code,
+                deduction,
+                start_date,
+                end_date,
+                status
+            FROM coupons
+            WHERE code = $1;
+        `;
+
+        const result = await pool.query(query, [couponCode.trim().toUpperCase()]);
+
+        if (result.rows.length === 0) {
+            console.log(`❌ Coupon validation failed: Coupon code "${couponCode}" does not exist in database`);
+            return res.status(404).json({
+                success: false,
+                error: 'Coupon code invalid'
+            });
+        }
+
+        const coupon = result.rows[0];
+        console.log('📋 Coupon found:', {
+            code: coupon.code,
+            deduction: coupon.deduction,
+            start_date: new Date(coupon.start_date * 1000).toISOString(),
+            end_date: new Date(coupon.end_date * 1000).toISOString(),
+            status: coupon.status
+        });
+
+        // Check if coupon is enabled
+        if (!coupon.status) {
+            console.log(`❌ Coupon validation failed: Coupon "${coupon.code}" is disabled (status: ${coupon.status})`);
+            return res.status(400).json({
+                success: false,
+                error: 'Coupon code invalid'
+            });
+        }
+
+        // Check if coupon is within valid date range
+        const currentTimestamp = Date.now();
+        const startTimestamp = coupon.start_date * 1000;
+        const endTimestamp = coupon.end_date * 1000;
+        
+        const currentDate = new Date(currentTimestamp).toISOString();
+        const startDate = new Date(startTimestamp).toISOString();
+        const endDate = new Date(endTimestamp).toISOString();
+        
+        if (currentTimestamp < startTimestamp) {
+            console.log(`❌ Coupon validation failed: Coupon "${coupon.code}" has not started yet`);
+            console.log(`   Current date: ${currentDate}`);
+            console.log(`   Start date: ${startDate}`);
+            console.log(`   End date: ${endDate}`);
+            return res.status(400).json({
+                success: false,
+                error: 'Coupon code invalid'
+            });
+        }
+        
+        if (currentTimestamp > endTimestamp) {
+            console.log(`❌ Coupon validation failed: Coupon "${coupon.code}" has expired`);
+            console.log(`   Current date: ${currentDate}`);
+            console.log(`   Start date: ${startDate}`);
+            console.log(`   End date: ${endDate}`);
+            return res.status(400).json({
+                success: false,
+                error: 'Coupon code invalid'
+            });
+        }
+
+        // Coupon is valid
+        console.log(`✅ Coupon validation successful: "${coupon.code}" is valid with deduction of ₹${coupon.deduction}`);
+        res.json({
+            success: true,
+            message: 'Coupon is valid',
+            coupon: {
+                code: coupon.code,
+                deduction: coupon.deduction
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error validating coupon:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 router.get('/:id', authenticateToken, async (req, res) => {
     try{
