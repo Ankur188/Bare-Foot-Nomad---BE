@@ -6,9 +6,29 @@ import bcrypt from 'bcrypt';
 const router = express.Router();
 
 // GET /api/admin/users - Get all users with their associated trips with pagination
+// If search query param is provided, return filtered users with only id and name
 router.get('/', authenticateToken, async (req, res) => {
     try {
-        // Get pagination parameters from query string
+        const searchQuery = req.query.search;
+
+        // If search query is provided, return only id and name of matching users
+        if (searchQuery) {
+            const query = `
+                SELECT id, name
+                FROM users
+                WHERE LOWER(name) LIKE LOWER($1)
+                ORDER BY name ASC;
+            `;
+            const result = await pool.query(query, [`%${searchQuery}%`]);
+            
+            return res.json({
+                success: true,
+                count: result.rows.length,
+                users: result.rows
+            });
+        }
+
+        // Regular pagination flow when no search query
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;

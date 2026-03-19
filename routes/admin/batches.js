@@ -5,9 +5,29 @@ import { authenticateToken } from '../../middleware/authorization.js';
 const router = express.Router();
 
 // GET /api/admin/batches - Get all batches with pagination
+// If search query param is provided, return filtered batches with only id and batch_name
 router.get('/', authenticateToken, async (req, res) => {
     try {
-        // Get pagination parameters from query string
+        const searchQuery = req.query.search;
+
+        // If search query is provided, return only id and batch_name of matching batches
+        if (searchQuery) {
+            const query = `
+                SELECT id, batch_name
+                FROM batches
+                WHERE LOWER(batch_name) LIKE LOWER($1)
+                ORDER BY batch_name ASC;
+            `;
+            const result = await pool.query(query, [`%${searchQuery}%`]);
+            
+            return res.json({
+                success: true,
+                count: result.rows.length,
+                batches: result.rows
+            });
+        }
+
+        // Regular pagination flow when no search query
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
