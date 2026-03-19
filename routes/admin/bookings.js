@@ -2,7 +2,7 @@ import express from 'express';
 import pool from '../../db.js';
 import { authenticateToken } from '../../middleware/authorization.js';
 import multer from 'multer';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import crypto from 'crypto';
 
 const router = express.Router();
@@ -290,35 +290,7 @@ router.post('/', authenticateToken, upload.single('invoice'), async (req, res) =
             });
         }
 
-        // Handle invoice file upload (now mandatory)
-        let invoiceId = 0;
-        try {
-            const invoiceExtension = req.file.originalname.split('.').pop();
-            const invoiceKey = `invoices/${randomFileName()}.${invoiceExtension}`;
-            
-            const invoiceParams = {
-                Bucket: bucketName,
-                Key: invoiceKey,
-                Body: req.file.buffer,
-                ContentType: req.file.mimetype,
-            };
-            
-            await s3.send(new PutObjectCommand(invoiceParams));
-            
-            // TODO: For now, invoice_id remains 0 as the database expects INT
-            // Consider creating an invoices table to properly track uploaded files
-            // and their S3 keys, then store the invoice table ID here
-            console.log(`Invoice uploaded to S3: ${invoiceKey}`);
-            invoiceId = 0; // Keep as 0 for now
-        } catch (uploadError) {
-            console.error('Error uploading invoice:', uploadError);
-            return res.status(500).json({
-                success: false,
-                error: 'Failed to upload invoice file'
-            });
-        }
-
-        // Insert booking into database
+        // Insert booking into database first to get the booking ID
         const insertQuery = `
             INSERT INTO bookings (
                 user_id, 
@@ -345,8 +317,36 @@ router.post('/', authenticateToken, upload.single('invoice'), async (req, res) =
             paymentNum,
             travellersNum,
             roomType,
-            invoiceId
+            0 // invoice_id set to 0 initially
         ]);
+
+        const bookingId = result.rows[0].id;
+
+        // Upload invoice to S3 with booking ID as filename
+        try {
+            const invoiceExtension = req.file.originalname.split('.').pop();
+            const invoiceKey = `${bookingId}.${invoiceExtension}`;
+            
+            const invoiceParams = {
+                Bucket: bucketName,
+                Key: invoiceKey,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+            };
+            
+            await s3.send(new PutObjectCommand(invoiceParams));
+            
+            console.log(`Invoice uploaded to S3: ${invoiceKey} for booking ID: ${bookingId}`);
+        } catch (uploadError) {
+            console.error('Error uploading invoice:', uploadError);
+            // Note: Booking is already created, but invoice upload failed
+            // You may want to implement cleanup or marking the booking as incomplete
+            return res.status(500).json({
+                success: false,
+                error: 'Booking created but failed to upload invoice file',
+                bookingId: bookingId
+            });
+        }
 
         res.status(201).json({
             success: true,
@@ -356,6 +356,212 @@ router.post('/', authenticateToken, upload.single('invoice'), async (req, res) =
 
     } catch (error) {
         console.error('Error creating booking:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
+// PUT /api/admin/bookings/:id - Update an existing booking
+router.put('/:id', authenticateToken, upload.single('invoice'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { 
+            user, 
+            batch, 
+            name, 
+            phoneNumber, 
+            guardianNumber, 
+            email, 
+            payment, 
+            travellers, 
+            roomType 
+        } = req.body;
+
+        // Check if booking exists
+        const checkQuery = 'SELECT id FROM bookings WHERE id = $1';
+        const checkResult = await pool.query(checkQuery, [id]);
+        
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false,
+                error: 'Booking not found' 
+            });
+        }
+
+        // Parse user and batch if they're JSON strings
+        let userId, batchId;
+        try {
+            if (typeof user === 'string') {
+                // Try to parse as JSON only if it looks like JSON (starts with { or [)
+                if (user.trim().startsWith('{') || user.trim().startsWith('[')) {
+                    const userObj = JSON.parse(user);
+                    userId = userObj.id;
+                } else {
+                    // Treat as UUID string directly
+                    userId = user;
+                }
+            } else if (user && user.id) {
+                userId = user.id;
+            } else {
+                userId = user;
+            }
+
+            if (typeof batch === 'string') {
+                // Try to parse as JSON only if it looks like JSON (starts with { or [)
+                if (batch.trim().startsWith('{') || batch.trim().startsWith('[')) {
+                    const batchObj = JSON.parse(batch);
+                    batchId = batchObj.id;
+                } else {
+                    // Treat as UUID string directly
+                    batchId = batch;
+                }
+            } else if (batch && batch.id) {
+                batchId = batch.id;
+            } else {
+                batchId = batch;
+            }
+        } catch (e) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid user or batch format'
+            });
+        }
+
+        // Validate required fields
+        if (!userId || !batchId || !name || !phoneNumber || !email || !payment || !travellers || !roomType) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: user, batch, name, phoneNumber, email, payment, travellers, and roomType are required'
+            });
+        }
+
+        // Validate payment is a positive number
+        const paymentNum = parseFloat(payment);
+        if (isNaN(paymentNum) || paymentNum <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Payment must be a positive number greater than 0'
+            });
+        }
+
+        // Validate travellers is a positive number
+        const travellersNum = parseInt(travellers);
+        if (isNaN(travellersNum) || travellersNum <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Travellers must be a positive number greater than 0'
+            });
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid email format'
+            });
+        }
+
+        // Validate phone number (should be numeric and 10 digits)
+        if (!/^\d{10}$/.test(phoneNumber.toString())) {
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number must be exactly 10 digits'
+            });
+        }
+
+        // Validate guardian number if provided
+        if (guardianNumber && !/^\d{10}$/.test(guardianNumber.toString())) {
+            return res.status(400).json({
+                success: false,
+                error: 'Guardian number must be exactly 10 digits'
+            });
+        }
+
+        // Check if user exists
+        const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        // Check if batch exists
+        const batchCheck = await pool.query('SELECT id FROM batches WHERE id = $1', [batchId]);
+        if (batchCheck.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Batch not found'
+            });
+        }
+
+        // Update booking in database
+        const updateQuery = `
+            UPDATE bookings 
+            SET user_id = $1,
+                batch_id = $2,
+                name = $3,
+                phone_number = $4,
+                guardian_number = $5,
+                email = $6,
+                payment = $7,
+                travellers = $8,
+                room_type = $9
+            WHERE id = $10
+            RETURNING *;
+        `;
+
+        const result = await pool.query(updateQuery, [
+            userId,
+            batchId,
+            name,
+            phoneNumber,
+            guardianNumber || null,
+            email,
+            paymentNum,
+            travellersNum,
+            roomType,
+            id
+        ]);
+
+        // If a new invoice file is provided, upload it to S3 with booking ID as filename
+        if (req.file) {
+            try {
+                const invoiceExtension = req.file.originalname.split('.').pop();
+                const invoiceKey = `${id}.${invoiceExtension}`;
+                
+                const invoiceParams = {
+                    Bucket: bucketName,
+                    Key: invoiceKey,
+                    Body: req.file.buffer,
+                    ContentType: req.file.mimetype,
+                };
+                
+                await s3.send(new PutObjectCommand(invoiceParams));
+                
+                console.log(`Invoice uploaded to S3: ${invoiceKey} for booking ID: ${id}`);
+            } catch (uploadError) {
+                console.error('Error uploading invoice:', uploadError);
+                // Note: Booking is already updated, but invoice upload failed
+                return res.status(500).json({
+                    success: false,
+                    error: 'Booking updated but failed to upload invoice file',
+                    booking: result.rows[0]
+                });
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Booking updated successfully',
+            booking: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('Error updating booking:', error);
         res.status(500).json({ 
             success: false,
             error: error.message 
@@ -379,7 +585,37 @@ router.delete('/:id', authenticateToken, async (req, res) => {
             });
         }
 
-        // Delete the booking
+        // Delete invoice from S3 if it exists
+        try {
+            // List all files with the booking ID prefix to find the invoice
+            const listParams = {
+                Bucket: bucketName,
+                Prefix: `${id}.`
+            };
+            
+            const listCommand = new ListObjectsV2Command(listParams);
+            const listResult = await s3.send(listCommand);
+            
+            // Delete all matching invoice files
+            if (listResult.Contents && listResult.Contents.length > 0) {
+                for (const file of listResult.Contents) {
+                    const deleteParams = {
+                        Bucket: bucketName,
+                        Key: file.Key
+                    };
+                    await s3.send(new DeleteObjectCommand(deleteParams));
+                    console.log(`Deleted invoice from S3: ${file.Key}`);
+                }
+            } else {
+                console.log(`No invoice found in S3 for booking ID: ${id}`);
+            }
+        } catch (s3Error) {
+            // Log the error but continue with booking deletion
+            console.error('Error deleting invoice from S3:', s3Error);
+            // Don't return error - proceed with booking deletion
+        }
+
+        // Delete the booking from database
         const deleteQuery = 'DELETE FROM bookings WHERE id = $1 RETURNING id';
         const result = await pool.query(deleteQuery, [id]);
 
