@@ -78,7 +78,6 @@ router.get('/', authenticateToken, async (req, res) => {
                 ...trip,
                 total_bookings: trip.users.length,
                 total_travellers: trip.travellers_array.reduce((sum, count) => sum + (count || 0), 0),
-                users_count: trip.users.length,
                 users: trip.users,  // Array of names only
                 travellers_array: undefined  // Remove internal helper array
             };
@@ -151,7 +150,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
             ...result.rows[0],
             total_bookings: result.rows[0].users.length,
             total_travellers: result.rows[0].travellers_array.reduce((sum, count) => sum + (count || 0), 0),
-            users_count: result.rows[0].users.length,
             users: result.rows[0].users,
             travellers_array: undefined
         };

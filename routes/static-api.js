@@ -52,7 +52,7 @@ router.get("/", async (req, res) => {
        FROM trips t
        LEFT JOIN LATERAL (
          SELECT * FROM batches 
-         WHERE trip_id = t.id AND status = true
+         WHERE trip_id = t.id AND status = true AND from_date > EXTRACT(EPOCH FROM NOW())
          ORDER BY price ASC, from_date ASC
          LIMIT 1
        ) b ON true
@@ -185,7 +185,7 @@ router.get("/:id", async (req, res) => {
        FROM trips t
        LEFT JOIN LATERAL (
          SELECT * FROM batches 
-         WHERE trip_id = t.id AND status = true
+         WHERE trip_id = t.id AND status = true AND from_date > EXTRACT(EPOCH FROM NOW())
          ORDER BY price ASC, from_date ASC
          LIMIT 1
        ) b ON true
@@ -269,11 +269,15 @@ router.get("/:id/batches", async (req, res) => {
     if (month) {
       // Filter by month and trip_id
       const query = `
-        SELECT b.*, COUNT(*) OVER() AS total_count
+        SELECT b.*, 
+               COALESCE((SELECT COUNT(*) FROM bookings WHERE batch_id = b.id), 0) as booked,
+               COUNT(*) OVER() AS total_count
         FROM batches b
         WHERE b.trip_id = $1
           AND b.status = true
+          AND b.from_date > EXTRACT(EPOCH FROM NOW())
           AND EXTRACT(MONTH FROM to_timestamp(b.from_date)) = $2
+          AND COALESCE((SELECT COUNT(*) FROM bookings WHERE batch_id = b.id), 0) < b.max_adventurers
         ORDER BY b.price ASC, b.from_date ASC
         LIMIT $3 OFFSET $4
       `;
@@ -294,17 +298,26 @@ router.get("/:id/batches", async (req, res) => {
         data: result.rows.map(({ total_count, ...batch }) => batch),
       });
     } else {
-      // Get all batches for this trip_id
+      // Get all upcoming batches with available spots for this trip_id
       const batches = await pool.query(
-        `SELECT * FROM batches 
-         WHERE trip_id = $1 AND status = true
+        `SELECT *, 
+                COALESCE((SELECT COUNT(*) FROM bookings WHERE batch_id = batches.id), 0) as booked
+         FROM batches 
+         WHERE trip_id = $1 
+           AND status = true
+           AND from_date > EXTRACT(EPOCH FROM NOW())
+           AND COALESCE((SELECT COUNT(*) FROM bookings WHERE batch_id = batches.id), 0) < max_adventurers
          ORDER BY price ASC, from_date ASC 
          LIMIT $2 OFFSET $3`,
         [tripId, limit, offset]
       );
       
       const countResult = await pool.query(
-        "SELECT COUNT(*) FROM batches WHERE trip_id = $1 AND status = true",
+        `SELECT COUNT(*) FROM batches 
+         WHERE trip_id = $1 
+           AND status = true
+           AND from_date > EXTRACT(EPOCH FROM NOW())
+           AND COALESCE((SELECT COUNT(*) FROM bookings WHERE batch_id = batches.id), 0) < max_adventurers`,
         [tripId]
       );
       
