@@ -74,10 +74,11 @@ router.get('/', authenticateToken, async (req, res) => {
         
         // Transform the data to have cleaner structure
         const batches = result.rows.map(trip => {
+            const totalTravellers = trip.travellers_array.reduce((sum, count) => sum + (count || 0), 0);
             return {
                 ...trip,
-                total_bookings: trip.users.length,
-                total_travellers: trip.travellers_array.reduce((sum, count) => sum + (count || 0), 0),
+                total_bookings: totalTravellers,
+                total_travellers: totalTravellers,
                 users: trip.users,  // Array of names only
                 travellers_array: undefined  // Remove internal helper array
             };
@@ -148,7 +149,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
         const batch = {
             ...result.rows[0],
-            total_bookings: result.rows[0].users.length,
+            total_bookings: result.rows[0].travellers_array.reduce((sum, count) => sum + (count || 0), 0),
             total_travellers: result.rows[0].travellers_array.reduce((sum, count) => sum + (count || 0), 0),
             users: result.rows[0].users,
             travellers_array: undefined
