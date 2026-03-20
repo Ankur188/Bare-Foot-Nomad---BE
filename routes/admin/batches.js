@@ -54,7 +54,7 @@ router.get('/', authenticateToken, async (req, res) => {
                 ba.batch_name,
                 ba.trip_id,
                 COALESCE(
-                    json_agg(b.name ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
+                    json_agg(u.name ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
                 ) as users,
                 COALESCE(
@@ -123,7 +123,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
                 ba.batch_name,
                 ba.trip_id,
                 COALESCE(
-                    json_agg(b.name ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
+                    json_agg(u.name ORDER BY b.id) FILTER (WHERE b.id IS NOT NULL),
                     '[]'
                 ) as users,
                 COALESCE(
@@ -337,12 +337,12 @@ router.put('/:id', authenticateToken, async (req, res) => {
         }
         if (singleRoom !== undefined) {
             updates.push(`single_room = $${paramCount}`);
-            values.push(parseInt(singleRoom));
+            values.push(parseInt(singleRoom) || 0);
             paramCount++;
         }
         if (doubleRoom !== undefined) {
             updates.push(`double_room = $${paramCount}`);
-            values.push(parseInt(doubleRoom));
+            values.push(parseInt(doubleRoom) || 0);
             paramCount++;
         }
         if (tripleRoom !== undefined) {
