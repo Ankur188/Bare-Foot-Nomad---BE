@@ -63,4 +63,26 @@ router.get('/refreshToken', (req,res) => {
     }
 })
 
+router.post('/logout', (req, res) => {
+    try {
+        // Clear the refresh token cookie
+        res.clearCookie('refresh_token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Use secure flag in production
+            sameSite: 'strict'
+        });
+        
+        // Send success response
+        res.status(200).json({ 
+            message: 'Logged out successfully',
+            success: true 
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            error: error.message,
+            success: false 
+        });
+    }
+});
+
 export default router;
