@@ -3,6 +3,7 @@ import pool from '../db.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import {jwtTokens} from  '../utils/jwt-helpers.js';
+import { authenticateToken } from '../middleware/authorization.js';
 
 const router = express.Router();
 
@@ -76,6 +77,104 @@ router.post('/logout', (req, res) => {
         res.status(200).json({ 
             message: 'Logged out successfully',
             success: true 
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            error: error.message,
+            success: false 
+        });
+    }
+});
+
+router.get('/profile/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Query user data by ID, excluding password
+        const result = await pool.query(
+            'SELECT id, name, email, phone_number, created_at, role, gender, emergency_contact, address FROM users WHERE id = $1',
+            [id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                error: 'User not found',
+                success: false 
+            });
+        }
+        
+        // Return user data
+        const user = result.rows[0];
+        res.status(200).json({
+            success: true,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                phoneNumber: user.phone_number,
+                createdAt: user.created_at,
+                role: user.role,
+                gender: user.gender,
+                emergencyContact: user.emergency_contact,
+                address: user.address
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ 
+            error: error.message,
+            success: false 
+        });
+    }
+});
+
+router.put('/profile/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, gender, phoneNumber, address, emergencyContact } = req.body;
+        
+        // Verify user exists
+        const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [id]);
+        
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ 
+                error: 'User not found',
+                success: false 
+            });
+        }
+        
+        // Update user profile
+        const updateQuery = `
+            UPDATE users 
+            SET name = $1, phone_number = $2, gender = $3, emergency_contact = $4, address = $5
+            WHERE id = $6
+            RETURNING id, name, email, phone_number, created_at, role, gender, emergency_contact, address
+        `;
+        
+        const result = await pool.query(updateQuery, [
+            name,
+            phoneNumber,
+            gender,
+            emergencyContact,
+            address,
+            id
+        ]);
+        
+        const updatedUser = result.rows[0];
+        
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            user: {
+                id: updatedUser.id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                phoneNumber: updatedUser.phone_number,
+                createdAt: updatedUser.created_at,
+                role: updatedUser.role,
+                gender: updatedUser.gender,
+                emergencyContact: updatedUser.emergency_contact,
+                address: updatedUser.address
+            }
         });
     } catch (error) {
         res.status(500).json({ 
