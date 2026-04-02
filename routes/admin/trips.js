@@ -71,14 +71,36 @@ router.get('/', authenticateToken, async (req, res) => {
             ? await pool.query(query, [searchParam, limit, offset])
             : await pool.query(query, [limit, offset]);
         
+        // For each trip, fetch batches with booking counts
+        const tripsWithBatches = await Promise.all(result.rows.map(async (trip) => {
+            const batchesQuery = `
+                SELECT 
+                    ba.id,
+                    ba.from_date,
+                    ba.to_date,
+                    ba.batch_name,
+                    COALESCE(SUM(b.travellers), 0) as booking_count
+                FROM batches ba
+                LEFT JOIN bookings b ON ba.id = b.batch_id
+                WHERE ba.trip_id = $1
+                GROUP BY ba.id, ba.from_date, ba.to_date, ba.batch_name
+                ORDER BY ba.from_date ASC;
+            `;
+            const batchesResult = await pool.query(batchesQuery, [trip.id]);
+            return {
+                ...trip,
+                batches: batchesResult.rows
+            };
+        }));
+        
         res.json({ 
             success: true,
-            count: result.rows.length,
+            count: tripsWithBatches.length,
             total: totalCount,
             page: page,
             limit: limit,
             totalPages: Math.ceil(totalCount / limit),
-            trips: result.rows 
+            trips: tripsWithBatches 
         });
     } catch (error) {
         console.error('Error fetching trips:', error);
