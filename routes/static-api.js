@@ -1,7 +1,7 @@
 import express from "express";
 import pool from "../db.js";
 import dotenv from "dotenv";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 dotenv.config();
@@ -21,12 +21,44 @@ const s3 = new S3Client({
   region: bucketRegion,
 });
 
-async function getTripSignedUrl(bucketName, key) {
-  const command = new GetObjectCommand({
-    Bucket: bucketName,
-    Key: key, // exact S3 key
-  });
-  return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+async function getTripSignedUrl(bucketName, keyPrefix) {
+  // Try to find the file with any extension by listing objects with the prefix
+  try {
+    const listCommand = new ListObjectsV2Command({
+      Bucket: bucketName,
+      Prefix: keyPrefix,
+      MaxKeys: 1
+    });
+    
+    const listResult = await s3.send(listCommand);
+    
+    if (listResult.Contents && listResult.Contents.length > 0) {
+      const actualKey = listResult.Contents[0].Key;
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: actualKey,
+      });
+      return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+    }
+    
+    // If no file found with prefix, try common extensions
+    const extensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    for (const ext of extensions) {
+      try {
+        const command = new GetObjectCommand({
+          Bucket: bucketName,
+          Key: keyPrefix + ext,
+        });
+        return await getSignedUrl(s3, command, { expiresIn: 3600 });
+      } catch (e) {
+        continue; // Try next extension
+      }
+    }
+    
+    throw new Error('Image not found');
+  } catch (error) {
+    throw error;
+  }
 }
 
 
@@ -117,9 +149,11 @@ router.get("/", async (req, res) => {
     // Attach presigned image URL to each trip
     for (const trip of trips) {
       try {
+        // Sanitize destination name to match S3 upload naming convention
+        const sanitizedName = trip.destination_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         trip.imageUrl = await getTripSignedUrl(
           bucketName,
-          trip.destination_name
+          `trips/${sanitizedName}_1`
         );
       } catch (err) {
         console.error(
@@ -247,7 +281,12 @@ router.get("/:id", async (req, res) => {
 
     // Add image URL
     try {
-      trip.imageUrl = await getTripSignedUrl(trip.destination_name, req);
+      // Sanitize destination name to match S3 upload naming convention
+      const sanitizedName = trip.destination_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      trip.imageUrl = await getTripSignedUrl(
+        bucketName,
+        `trips/${sanitizedName}_1`
+      );
     } catch (err) {
       console.error("Failed to generate signed URL for", trip.destination_name, err);
       trip.imageUrl = null;

@@ -36,9 +36,13 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     // const filename = req.body.categoryId + "img";
     // const mimetype = req.body.mimetype;
     console.log(111, req.file);
+    
+    // Sanitize categoryId: trim spaces and convert to lowercase
+    const sanitizedKey = req.body.categoryId ? req.body.categoryId.trim().toLowerCase() : "";
+    
     const params = {
       Bucket: bucketName,
-      Key: req.body.categoryId + "",
+      Key: sanitizedKey,
       Body: req.file.buffer,
       ContentType: req.file.mimetype,
     };
@@ -59,8 +63,11 @@ router.get("/banner", async (req, res) => {
       return res.status(400).json({ error: 'Banner name is required' });
     }
     
+    // Sanitize name: trim spaces and convert to lowercase
+    const sanitizedName = name.trim().toLowerCase();
+    
     // Add 'banners/' prefix if not already present
-    const s3Key = name.startsWith('banners/') ? name : `banners/${name}`;
+    const s3Key = sanitizedName.startsWith('banners/') ? sanitizedName : `banners/${sanitizedName}`;
     
     const getObjectParams = {
       Bucket: bucketName,

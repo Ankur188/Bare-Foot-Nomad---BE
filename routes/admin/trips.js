@@ -185,8 +185,8 @@ router.post('/', authenticateToken, upload.fields([
             });
         }
 
-        // Sanitize destination name for file naming
-        const sanitizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        // Sanitize destination name for file naming (trim spaces, lowercase, replace special chars)
+        const sanitizedName = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
         
         // Prepare file keys for S3 upload
         const itineraryFile = req.files.itinerary[0];
@@ -307,13 +307,16 @@ router.post('/', authenticateToken, upload.fields([
 });
 
 // PUT /api/admin/trips/:id - Update an existing trip
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, upload.fields([
+    { name: 'itinerary', maxCount: 1 },
+    { name: 'images', maxCount: 30 }
+]), async (req, res) => {
     try {
         const tripId = req.params.id;
         const { status, name, description, days, nights, destinations, physicalRating, daysData } = req.body;
         
         // Check if trip exists
-        const existingTripQuery = 'SELECT id FROM trips WHERE id = $1';
+        const existingTripQuery = 'SELECT id, destination_name FROM trips WHERE id = $1';
         const existingTrip = await pool.query(existingTripQuery, [tripId]);
         
         if (existingTrip.rows.length === 0) {
@@ -323,8 +326,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
             });
         }
 
+        const currentTripName = existingTrip.rows[0].destination_name;
+
         // If name is being updated, check if another trip (with different ID) has the same name
-        if (name !== undefined) {
+        if (name !== undefined && name !== currentTripName) {
             const duplicateNameQuery = 'SELECT id FROM trips WHERE destination_name = $1 AND id != $2';
             const duplicateTrip = await pool.query(duplicateNameQuery, [name, tripId]);
             
@@ -334,6 +339,57 @@ router.put('/:id', authenticateToken, async (req, res) => {
                     error: 'Another trip already exists with this destination name'
                 });
             }
+        }
+
+        // Handle file uploads to S3
+        const uploadedKeys = [];
+        let itineraryKey = null;
+        const imageKeys = [];
+
+        // Use the trip name for S3 folder (updated or current)
+        const tripNameForS3 = name || currentTripName;
+        const sanitizedName = tripNameForS3.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+        try {
+            // Upload new itinerary file if provided
+            if (req.files && req.files.itinerary && req.files.itinerary.length > 0) {
+                const itineraryFile = req.files.itinerary[0];
+                const itineraryExtension = itineraryFile.originalname.split('.').pop();
+                itineraryKey = `trips/${sanitizedName}_itinerary.${itineraryExtension}`;
+                
+                const itineraryParams = {
+                    Bucket: bucketName,
+                    Key: itineraryKey,
+                    Body: itineraryFile.buffer,
+                    ContentType: itineraryFile.mimetype,
+                };
+                await s3.send(new PutObjectCommand(itineraryParams));
+                uploadedKeys.push(itineraryKey);
+            }
+
+            // Upload new images if provided
+            if (req.files && req.files.images && req.files.images.length > 0) {
+                for (let i = 0; i < req.files.images.length; i++) {
+                    const image = req.files.images[i];
+                    const imageExtension = image.originalname.split('.').pop();
+                    const imageKey = `trips/${sanitizedName}_${i + 1}.${imageExtension}`;
+                    const imageParams = {
+                        Bucket: bucketName,
+                        Key: imageKey,
+                        Body: image.buffer,
+                        ContentType: image.mimetype,
+                    };
+                    await s3.send(new PutObjectCommand(imageParams));
+                    imageKeys.push(imageKey);
+                    uploadedKeys.push(imageKey);
+                }
+            }
+        } catch (s3Error) {
+            console.error('S3 upload error:', s3Error);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to upload files to S3'
+            });
         }
 
         // Build dynamic update query
@@ -389,8 +445,37 @@ router.put('/:id', authenticateToken, async (req, res) => {
         }
 
         if (daysData !== undefined) {
+            // Prepare itinerary text from daysData if provided
+            let itineraryText = '';
+            try {
+                const parsedDaysData = typeof daysData === 'string' ? JSON.parse(daysData) : daysData;
+                const numberOfDays = Object.keys(parsedDaysData).length;
+                
+                for (let i = 1; i <= numberOfDays; i++) {
+                    const day = parsedDaysData[i.toString()];
+                    if (day) {
+                        itineraryText += `Day ${i}: ${day.title}\n${day.content}\n\n`;
+                    }
+                }
+            } catch (parseError) {
+                console.error('Error parsing daysData:', parseError);
+            }
+
             updates.push(`itinerary = $${paramCount}`);
-            values.push(daysData);
+            // Use itinerary text if available, otherwise use the uploaded itinerary key
+            values.push(itineraryText || itineraryKey || daysData);
+            paramCount++;
+        } else if (itineraryKey) {
+            // If no daysData but itinerary file was uploaded
+            updates.push(`itinerary = $${paramCount}`);
+            values.push(itineraryKey);
+            paramCount++;
+        }
+
+        // Update images count if new images were uploaded
+        if (imageKeys.length > 0) {
+            updates.push(`images = $${paramCount}`);
+            values.push(imageKeys.length);
             paramCount++;
         }
 
@@ -416,7 +501,11 @@ router.put('/:id', authenticateToken, async (req, res) => {
         res.json({
             success: true,
             message: 'Trip updated successfully',
-            trip: result.rows[0]
+            trip: result.rows[0],
+            uploadedFiles: {
+                itinerary: itineraryKey,
+                images: imageKeys
+            }
         });
     } catch (error) {
         console.error('Error updating trip:', error);

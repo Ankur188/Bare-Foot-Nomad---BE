@@ -80,11 +80,12 @@ router.put('/:id/image', authenticateToken, upload.single('image'), async (req, 
 
         const banner = bannerResult.rows[0];
         
-        // Sanitize banner name for use in S3 key (remove special characters)
+        // Sanitize banner name for use in S3 key (trim spaces, lowercase, remove special characters)
         const sanitizedName = banner.banner_name
+            .trim()
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '');
+            .replace(/^-+|-+$/g, '');
         
         // Create S3 key using banner name without extension
         const imageKey = `banners/${sanitizedName}`;
