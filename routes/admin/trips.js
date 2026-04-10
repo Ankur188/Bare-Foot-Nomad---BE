@@ -230,11 +230,12 @@ router.post('/', authenticateToken, upload.fields([
             await s3.send(new PutObjectCommand(itineraryParams));
             uploadedKeys.push(itineraryKey);
 
-            // Upload images to S3
+            // Upload images to S3 with UUID naming
             for (let i = 0; i < req.files.images.length; i++) {
                 const image = req.files.images[i];
                 const imageExtension = image.originalname.split('.').pop();
-                const imageKey = `trips/${sanitizedName}_${i + 1}.${imageExtension}`;
+                const imageUuid = randomImageName(16); // Generate UUID
+                const imageKey = `trips/${sanitizedName}_${imageUuid}.${imageExtension}`;
                 const imageParams = {
                     Bucket: bucketName,
                     Key: imageKey,
@@ -372,8 +373,64 @@ router.put('/:id', authenticateToken, upload.fields([
         const tripNameForS3 = name || currentTripName;
         const sanitizedName = tripNameForS3.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+        /**
+         * Image Management Flow (UUID-based):
+         * 1. Delete removed images from S3 (from removedImageKeys)
+         * 2. Keep existing images as-is (they have unique UUID names)
+         * 3. Upload new images with new UUID names
+         */
+
         try {
-            // Upload new itinerary file if provided
+            // Step 1: Delete removed images from S3 (if any)
+            let removedImageKeys = [];
+            if (req.body.removedImageKeys) {
+                try {
+                    removedImageKeys = JSON.parse(req.body.removedImageKeys);
+                    console.log(`Deleting ${removedImageKeys.length} removed images from S3:`, removedImageKeys);
+                    
+                    for (const imageKey of removedImageKeys) {
+                        try {
+                            await s3.send(new DeleteObjectCommand({
+                                Bucket: bucketName,
+                                Key: imageKey
+                            }));
+                            console.log(`Deleted: ${imageKey}`);
+                        } catch (deleteError) {
+                            console.error(`Failed to delete ${imageKey}:`, deleteError.message);
+                        }
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing removedImageKeys:', parseError);
+                }
+            }
+
+            // Delete removed itinerary from S3 (if any)
+            if (req.body.removedItineraryKey) {
+                try {
+                    console.log(`Deleting removed itinerary from S3: ${req.body.removedItineraryKey}`);
+                    await s3.send(new DeleteObjectCommand({
+                        Bucket: bucketName,
+                        Key: req.body.removedItineraryKey
+                    }));
+                    console.log(`Deleted itinerary: ${req.body.removedItineraryKey}`);
+                } catch (deleteError) {
+                    console.error(`Failed to delete itinerary:`, deleteError.message);
+                }
+            }
+
+            // Step 2: Track existing images (no renaming needed with UUID-based naming)
+            let existingImageKeys = [];
+            if (req.body.existingImageKeys) {
+                try {
+                    existingImageKeys = JSON.parse(req.body.existingImageKeys);
+                    console.log(`Keeping ${existingImageKeys.length} existing images with UUID names`);
+                    console.log('Existing image keys:', existingImageKeys);
+                } catch (parseError) {
+                    console.error('Error parsing existingImageKeys:', parseError);
+                }
+            }
+
+            // Step 3: Upload itinerary file if provided
             if (req.files && req.files.itinerary && req.files.itinerary.length > 0) {
                 const itineraryFile = req.files.itinerary[0];
                 const itineraryExtension = itineraryFile.originalname.split('.').pop();
@@ -389,12 +446,17 @@ router.put('/:id', authenticateToken, upload.fields([
                 uploadedKeys.push(itineraryKey);
             }
 
-            // Upload new images if provided
+            // Upload new images if provided with UUID naming
             if (req.files && req.files.images && req.files.images.length > 0) {
+                console.log(`Uploading ${req.files.images.length} new images with UUID naming`);
+                console.log(`After upload, total will be: ${existingImageKeys.length} existing + ${req.files.images.length} new = ${existingImageKeys.length + req.files.images.length} total`);
+                
                 for (let i = 0; i < req.files.images.length; i++) {
                     const image = req.files.images[i];
                     const imageExtension = image.originalname.split('.').pop();
-                    const imageKey = `trips/${sanitizedName}_${i + 1}.${imageExtension}`;
+                    const imageUuid = randomImageName(16); // Generate UUID
+                    const imageKey = `trips/${sanitizedName}_${imageUuid}.${imageExtension}`;
+                    console.log(`Uploading new image ${i + 1}/${req.files.images.length} as: ${imageKey}`);
                     const imageParams = {
                         Bucket: bucketName,
                         Key: imageKey,
@@ -494,10 +556,13 @@ router.put('/:id', authenticateToken, upload.fields([
             paramCount++;
         }
 
-        // Update images count if new images were uploaded
-        if (imageKeys.length > 0) {
+        // Update images count if new images were uploaded OR if images were modified
+        if (imageKeys.length > 0 || req.body.totalImageCount) {
             updates.push(`images = $${paramCount}`);
-            values.push(imageKeys.length);
+            // Use total count if provided (accounts for deletions and additions)
+            const totalImageCount = req.body.totalImageCount ? parseInt(req.body.totalImageCount) : imageKeys.length;
+            console.log(`Updating trip images count in DB: ${totalImageCount}`);
+            values.push(totalImageCount);
             paramCount++;
         }
 

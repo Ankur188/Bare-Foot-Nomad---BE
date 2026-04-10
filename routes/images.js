@@ -2,7 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { authenticateToken } from "../middleware/authorization.js";
 import multer from "multer";
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -77,6 +77,143 @@ router.get("/banner", async (req, res) => {
     const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
     res.json({ imageUrl : url });
       } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/img/trip - Get signed URLs for trip images by listing all images with tripname prefix
+router.get("/trip", async (req, res) => {
+  try {
+    console.log('Trip images endpoint hit:', req.query);
+    const tripName = req.query.name;
+    
+    if (!tripName) {
+      console.log('Missing trip name in request');
+      return res.status(400).json({ error: 'Trip name is required' });
+    }
+    
+    // Sanitize trip name (same logic as in trips.js)
+    const sanitizedName = tripName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    console.log('Sanitized trip name:', sanitizedName);
+    
+    // List all images with the trip name prefix
+    const listParams = {
+      Bucket: bucketName,
+      Prefix: `trips/${sanitizedName}_`
+    };
+    
+    const listCommand = new ListObjectsV2Command(listParams);
+    const listResponse = await s3.send(listCommand);
+    
+    if (!listResponse.Contents || listResponse.Contents.length === 0) {
+      console.log('No images found for trip:', sanitizedName);
+      return res.json({ images: [] });
+    }
+    
+    // Generate signed URLs for all found images (excluding itinerary files)
+    const imageUrls = [];
+    
+    for (const obj of listResponse.Contents) {
+      // Skip files containing 'itinerary' in their name
+      if (obj.Key.toLowerCase().includes('itinerary')) {
+        console.log('Skipping itinerary file:', obj.Key);
+        continue;
+      }
+      
+      try {
+        const getObjectParams = {
+          Bucket: bucketName,
+          Key: obj.Key,
+        };
+        const command = new GetObjectCommand(getObjectParams);
+        const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        
+        imageUrls.push({
+          key: obj.Key,
+          url: url,
+          name: obj.Key.split('/').pop(),
+          size: obj.Size,
+          lastModified: obj.LastModified
+        });
+      } catch (error) {
+        console.error('Error generating signed URL for:', obj.Key, error);
+      }
+    }
+    
+    console.log('Returning response:', { imageCount: imageUrls.length });
+    res.json({ 
+      images: imageUrls
+    });
+  } catch (error) {
+    console.error('Error in trip images endpoint:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/img/trip/itinerary - Get signed URL for trip itinerary file
+router.get("/trip/itinerary", async (req, res) => {
+  try {
+    console.log('Trip itinerary endpoint hit:', req.query);
+    const tripName = req.query.name;
+    
+    if (!tripName) {
+      console.log('Missing trip name in request');
+      return res.status(400).json({ error: 'Trip name is required' });
+    }
+    
+    // Sanitize trip name (same logic as in trips.js)
+    const sanitizedName = tripName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    console.log('Sanitized trip name:', sanitizedName);
+    
+    // List all files with the trip name prefix to find the itinerary
+    const listParams = {
+      Bucket: bucketName,
+      Prefix: `trips/${sanitizedName}_`
+    };
+    
+    const listCommand = new ListObjectsV2Command(listParams);
+    const listResponse = await s3.send(listCommand);
+    
+    if (!listResponse.Contents || listResponse.Contents.length === 0) {
+      console.log('No files found for trip:', sanitizedName);
+      return res.json({ success: false, itinerary: null });
+    }
+    
+    // Find the itinerary file (contains 'itinerary' in the name)
+    const itineraryFile = listResponse.Contents.find(obj => 
+      obj.Key.toLowerCase().includes('itinerary')
+    );
+    
+    if (!itineraryFile) {
+      console.log('No itinerary file found for trip:', sanitizedName);
+      return res.json({ success: false, itinerary: null });
+    }
+    
+    try {
+      const getObjectParams = {
+        Bucket: bucketName,
+        Key: itineraryFile.Key,
+      };
+      const command = new GetObjectCommand(getObjectParams);
+      const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      
+      console.log('Found itinerary file:', itineraryFile.Key);
+      res.json({ 
+        success: true,
+        itinerary: {
+          key: itineraryFile.Key,
+          url: url,
+          name: itineraryFile.Key.split('/').pop(),
+          size: itineraryFile.Size,
+          lastModified: itineraryFile.LastModified
+        }
+      });
+    } catch (error) {
+      console.error('Error generating signed URL for itinerary:', error);
+      res.status(500).json({ error: error.message });
+    }
+  } catch (error) {
+    console.error('Error in trip itinerary endpoint:', error);
     res.status(500).json({ error: error.message });
   }
 });
