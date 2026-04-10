@@ -247,15 +247,6 @@ router.post('/', authenticateToken, upload.fields([
                 uploadedKeys.push(imageKey);
             }
 
-            // Prepare itinerary text from daysData
-            let itineraryText = '';
-            for (let i = 1; i <= parseInt(numberOfDays); i++) {
-                const day = parsedDaysData[i.toString()];
-                if (day) {
-                    itineraryText += `Day ${i}: ${day.title}\n${day.content}\n\n`;
-                }
-            }
-
             // Handle days field - if it's JSON, store as-is; otherwise store the value
             let daysValue = days;
             if (typeof days === 'object') {
@@ -283,7 +274,7 @@ router.post('/', authenticateToken, upload.fields([
             const result = await pool.query(insertQuery, [
                 name,
                 description,
-                itineraryText || itineraryKey, // Store either formatted text or file key
+                daysData, // Store daysData as JSON stringified format
                 destinations, // Store destinations from form
                 parseInt(physicalRating), // Physical rating from form
                 daysValue, // Days stored as-is (string or JSON string)
@@ -529,25 +520,9 @@ router.put('/:id', authenticateToken, upload.fields([
         }
 
         if (daysData !== undefined) {
-            // Prepare itinerary text from daysData if provided
-            let itineraryText = '';
-            try {
-                const parsedDaysData = typeof daysData === 'string' ? JSON.parse(daysData) : daysData;
-                const numberOfDays = Object.keys(parsedDaysData).length;
-                
-                for (let i = 1; i <= numberOfDays; i++) {
-                    const day = parsedDaysData[i.toString()];
-                    if (day) {
-                        itineraryText += `Day ${i}: ${day.title}\n${day.content}\n\n`;
-                    }
-                }
-            } catch (parseError) {
-                console.error('Error parsing daysData:', parseError);
-            }
-
             updates.push(`itinerary = $${paramCount}`);
-            // Use itinerary text if available, otherwise use the uploaded itinerary key
-            values.push(itineraryText || itineraryKey || daysData);
+            // Store daysData as JSON stringified format
+            values.push(daysData);
             paramCount++;
         } else if (itineraryKey) {
             // If no daysData but itinerary file was uploaded

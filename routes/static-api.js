@@ -21,41 +21,40 @@ const s3 = new S3Client({
   region: bucketRegion,
 });
 
-async function getTripSignedUrl(bucketName, keyPrefix) {
-  // Try to find the file with any extension by listing objects with the prefix
+async function getRandomTripImageUrl(bucketName, tripName) {
+  // List all images for the trip and pick a random one (excluding itinerary files)
   try {
+    const sanitizedName = tripName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    
     const listCommand = new ListObjectsV2Command({
       Bucket: bucketName,
-      Prefix: keyPrefix,
-      MaxKeys: 1
+      Prefix: `trips/${sanitizedName}_`
     });
     
     const listResult = await s3.send(listCommand);
     
     if (listResult.Contents && listResult.Contents.length > 0) {
-      const actualKey = listResult.Contents[0].Key;
+      // Filter out itinerary files
+      const imageFiles = listResult.Contents.filter(obj => 
+        !obj.Key.toLowerCase().includes('itinerary')
+      );
+      
+      if (imageFiles.length === 0) {
+        throw new Error('No images found for trip');
+      }
+      
+      // Pick a random image
+      const randomIndex = Math.floor(Math.random() * imageFiles.length);
+      const randomImage = imageFiles[randomIndex];
+      
       const command = new GetObjectCommand({
         Bucket: bucketName,
-        Key: actualKey,
+        Key: randomImage.Key,
       });
       return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
     }
     
-    // If no file found with prefix, try common extensions
-    const extensions = ['.jpg', '.jpeg', '.png', '.webp'];
-    for (const ext of extensions) {
-      try {
-        const command = new GetObjectCommand({
-          Bucket: bucketName,
-          Key: keyPrefix + ext,
-        });
-        return await getSignedUrl(s3, command, { expiresIn: 3600 });
-      } catch (e) {
-        continue; // Try next extension
-      }
-    }
-    
-    throw new Error('Image not found');
+    throw new Error('No images found for trip');
   } catch (error) {
     throw error;
   }
@@ -149,11 +148,10 @@ router.get("/", async (req, res) => {
     // Attach presigned image URL to each trip
     for (const trip of trips) {
       try {
-        // Sanitize destination name to match S3 upload naming convention
-        const sanitizedName = trip.destination_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-        trip.imageUrl = await getTripSignedUrl(
+        // Get a random image from S3 for this trip
+        trip.imageUrl = await getRandomTripImageUrl(
           bucketName,
-          `trips/${sanitizedName}_1`
+          trip.destination_name
         );
       } catch (err) {
         console.error(
@@ -281,11 +279,10 @@ router.get("/:id", async (req, res) => {
 
     // Add image URL
     try {
-      // Sanitize destination name to match S3 upload naming convention
-      const sanitizedName = trip.destination_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-      trip.imageUrl = await getTripSignedUrl(
+      // Get a random image from S3 for this trip
+      trip.imageUrl = await getRandomTripImageUrl(
         bucketName,
-        `trips/${sanitizedName}_1`
+        trip.destination_name
       );
     } catch (err) {
       console.error("Failed to generate signed URL for", trip.destination_name, err);
