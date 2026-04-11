@@ -60,6 +60,52 @@ async function getRandomTripImageUrl(bucketName, tripName) {
   }
 }
 
+async function getRandomTripImages(bucketName, tripName, count = 3) {
+  // List all images for the trip and pick random ones (excluding itinerary files)
+  try {
+    const sanitizedName = tripName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    
+    const listCommand = new ListObjectsV2Command({
+      Bucket: bucketName,
+      Prefix: `trips/${sanitizedName}_`
+    });
+    
+    const listResult = await s3.send(listCommand);
+    
+    if (listResult.Contents && listResult.Contents.length > 0) {
+      // Filter out itinerary files
+      const imageFiles = listResult.Contents.filter(obj => 
+        !obj.Key.toLowerCase().includes('itinerary')
+      );
+      
+      if (imageFiles.length === 0) {
+        throw new Error('No images found for trip');
+      }
+      
+      // Shuffle array and pick up to 'count' images
+      const shuffled = [...imageFiles].sort(() => 0.5 - Math.random());
+      const selectedImages = shuffled.slice(0, Math.min(count, imageFiles.length));
+      
+      // Generate signed URLs for all selected images
+      const imageUrls = await Promise.all(
+        selectedImages.map(async (image) => {
+          const command = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: image.Key,
+          });
+          return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+        })
+      );
+      
+      return imageUrls;
+    }
+    
+    throw new Error('No images found for trip');
+  } catch (error) {
+    throw error;
+  }
+}
+
 
 // Route to get all trips with earliest and latest batch dates
 router.get("/", async (req, res) => {
@@ -277,15 +323,19 @@ router.get("/:id", async (req, res) => {
     trip.from_month = row.earliest_from_date;
     trip.to_month = row.latest_to_date;
 
-    // Add image URL
+    // Add image URLs (3 random images)
     try {
-      // Get a random image from S3 for this trip
-      trip.imageUrl = await getRandomTripImageUrl(
+      // Get 3 random images from S3 for this trip
+      trip.images = await getRandomTripImages(
         bucketName,
-        trip.destination_name
+        trip.destination_name,
+        3
       );
+      // Keep backward compatibility with single imageUrl
+      trip.imageUrl = trip.images.length > 0 ? trip.images[0] : null;
     } catch (err) {
-      console.error("Failed to generate signed URL for", trip.destination_name, err);
+      console.error("Failed to generate signed URLs for", trip.destination_name, err);
+      trip.images = [];
       trip.imageUrl = null;
     }
 
