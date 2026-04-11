@@ -106,6 +106,48 @@ async function getRandomTripImages(bucketName, tripName, count = 3) {
   }
 }
 
+async function getAllTripImages(bucketName, tripName) {
+  // Get ALL images for the trip (excluding itinerary files)
+  try {
+    const sanitizedName = tripName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    
+    const listCommand = new ListObjectsV2Command({
+      Bucket: bucketName,
+      Prefix: `trips/${sanitizedName}_`
+    });
+    
+    const listResult = await s3.send(listCommand);
+    
+    if (listResult.Contents && listResult.Contents.length > 0) {
+      // Filter out itinerary files
+      const imageFiles = listResult.Contents.filter(obj => 
+        !obj.Key.toLowerCase().includes('itinerary')
+      );
+      
+      if (imageFiles.length === 0) {
+        throw new Error('No images found for trip');
+      }
+      
+      // Generate signed URLs for ALL images
+      const imageUrls = await Promise.all(
+        imageFiles.map(async (image) => {
+          const command = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: image.Key,
+          });
+          return await getSignedUrl(s3, command, { expiresIn: 3600 }); // 1 hour
+        })
+      );
+      
+      return imageUrls;
+    }
+    
+    throw new Error('No images found for trip');
+  } catch (error) {
+    throw error;
+  }
+}
+
 
 // Route to get all trips with earliest and latest batch dates
 router.get("/", async (req, res) => {
@@ -323,19 +365,25 @@ router.get("/:id", async (req, res) => {
     trip.from_month = row.earliest_from_date;
     trip.to_month = row.latest_to_date;
 
-    // Add image URLs (3 random images)
+    // Add image URLs (3 random images for display + all images for lightbox)
     try {
-      // Get 3 random images from S3 for this trip
+      // Get 3 random images from S3 for this trip (for main display)
       trip.images = await getRandomTripImages(
         bucketName,
         trip.destination_name,
         3
+      );
+      // Get ALL images for the lightbox
+      trip.allImages = await getAllTripImages(
+        bucketName,
+        trip.destination_name
       );
       // Keep backward compatibility with single imageUrl
       trip.imageUrl = trip.images.length > 0 ? trip.images[0] : null;
     } catch (err) {
       console.error("Failed to generate signed URLs for", trip.destination_name, err);
       trip.images = [];
+      trip.allImages = [];
       trip.imageUrl = null;
     }
 
