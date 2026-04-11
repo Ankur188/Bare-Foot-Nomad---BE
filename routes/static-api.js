@@ -148,6 +148,40 @@ async function getAllTripImages(bucketName, tripName) {
   }
 }
 
+async function getTripItineraryKey(bucketName, tripName) {
+  // Get the itinerary file key for the trip
+  try {
+    const sanitizedName = tripName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    
+    const listCommand = new ListObjectsV2Command({
+      Bucket: bucketName,
+      Prefix: `trips/${sanitizedName}_`
+    });
+    
+    const listResult = await s3.send(listCommand);
+    
+    if (listResult.Contents && listResult.Contents.length > 0) {
+      // Find the itinerary file
+      const itineraryFile = listResult.Contents.find(obj => 
+        obj.Key.toLowerCase().includes('itinerary')
+      );
+      
+      if (!itineraryFile) {
+        throw new Error('No itinerary file found for trip');
+      }
+      
+      return {
+        key: itineraryFile.Key,
+        filename: itineraryFile.Key.split('/').pop() // Extract filename from key
+      };
+    }
+    
+    throw new Error('No itinerary file found for trip');
+  } catch (error) {
+    throw error;
+  }
+}
+
 
 // Route to get all trips with earliest and latest batch dates
 router.get("/", async (req, res) => {
@@ -388,6 +422,52 @@ router.get("/:id", async (req, res) => {
     }
 
     res.json(trip);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Route to download itinerary file for a trip (streams from S3)
+router.get("/:id/itinerary", async (req, res) => {
+  try {
+    const tripId = req.params.id;
+    
+    // First get the trip name from the database
+    const tripResult = await pool.query(
+      `SELECT destination_name FROM trips WHERE id = $1 AND status = true;`,
+      [tripId]
+    );
+
+    if (tripResult.rows.length === 0) {
+      return res.status(404).json({ error: "Trip not found" });
+    }
+
+    const tripName = tripResult.rows[0].destination_name;
+
+    // Get the itinerary file key from S3
+    try {
+      const itineraryData = await getTripItineraryKey(bucketName, tripName);
+      
+      // Get the file from S3
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: itineraryData.key,
+      });
+      
+      const s3Response = await s3.send(command);
+      
+      // Set headers for file download
+      res.setHeader('Content-Type', s3Response.ContentType || 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${itineraryData.filename}"`);
+      res.setHeader('Content-Length', s3Response.ContentLength);
+      
+      // Stream the file to the response
+      s3Response.Body.pipe(res);
+      
+    } catch (err) {
+      console.error("Failed to get itinerary for", tripName, err);
+      return res.status(404).json({ error: "Itinerary file not found" });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
