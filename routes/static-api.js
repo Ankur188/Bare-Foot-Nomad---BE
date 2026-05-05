@@ -276,12 +276,11 @@ router.get("/", async (req, res) => {
           trip.destination_name
         );
       } catch (err) {
-        console.error(
-          "Failed to generate signed URL for",
-          trip.destination_name,
-          err
+        console.log(
+          `No S3 image found for ${trip.destination_name}, using fallback image`
         );
-        trip.imageUrl = null;
+        // Set fallback image from assets folder
+        trip.imageUrl = '/kashmir_lightbox_4.jpg';
       }
     }
 
