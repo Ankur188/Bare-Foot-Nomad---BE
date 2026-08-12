@@ -12,19 +12,25 @@ dotenv.config();
 // - Local user defaults to 'postgres' with empty password unless provided via env
 
 const pool = new Pool({
-  host: 'barefootnomads-db.cl4ymqm82u3v.ap-south-1.rds.amazonaws.com',
-  user: 'barefootnomads',
-  password: "barefootnomads",
-  database: 'postgres',
+  host: "localhost",
   port: 5432,
-  ssl: {
-    require: true,
-    rejectUnauthorized: false
-  }
+  database: "barefootNomad",
+  user: "postgres",
+  password: "Batman@188",
+  // Only enable SSL when explicitly requested (e.g. connecting to managed RDS)
+  ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
-pool.connect()
-  .then(() => console.log("✅ Connected to AWS RDS PostgreSQL"))
-  .catch(err => console.error("❌ Connection error", err));
+// Do not automatically connect on import to avoid forcing a network call during tests
+// Consumers can call `pool.connect()` or `testConnection()` when they want to verify connectivity.
+export async function testConnection() {
+  try {
+    await pool.connect();
+    console.log(`✅ Connected to Postgres (${process.env.PGHOST || 'localhost'})`);
+  } catch (err) {
+    console.error("❌ Connection error", err);
+    throw err;
+  }
+}
 
 export default pool;
