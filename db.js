@@ -15,7 +15,7 @@ const pool = new Pool({
   host: 'barefootnomads.ct8ak62u8dub.ap-south-1.rds.amazonaws.com',
   user: 'postgres',
   password: "postgres",
-  database: 'barefootnomads',
+  database: 'postgres',
   port: 5432,
   ssl: {
     require: true,
