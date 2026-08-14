@@ -1,6 +1,6 @@
 import express from 'express';
 import pool from '../../db.js';
-import { authenticateToken } from '../../middleware/authorization.js';
+import { authenticateToken, authorizeSuperadmin } from '../../middleware/authorization.js';
 import bcrypt from 'bcrypt';
 
 const router = express.Router();
@@ -83,7 +83,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // POST /api/admin/users - Create a new user
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, authorizeSuperadmin, async (req, res) => {
     try {
         const { name, email, phoneNumber, role, password } = req.body;
 
@@ -133,6 +133,15 @@ router.post('/', authenticateToken, async (req, res) => {
         // Get current timestamp
         const createdAt = Math.floor(Date.now() / 1000);
 
+        const normalizedRole = role.toString().trim().toLowerCase();
+        const allowedRoles = ['user', 'admin', 'superadmin'];
+        if (!allowedRoles.includes(normalizedRole)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid role. Allowed values are user, admin, and superadmin'
+            });
+        }
+
         // Insert new user
         const insertQuery = `
             INSERT INTO users (name, email, password, phone_number, created_at, role)
@@ -146,7 +155,7 @@ router.post('/', authenticateToken, async (req, res) => {
             hashedPassword,
             parseInt(phoneNumber),
             createdAt,
-            role
+            normalizedRole
         ]);
 
         res.status(201).json({
@@ -164,7 +173,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/admin/users/:id/role - Update a user's role
-router.put('/:id/role', authenticateToken, async (req, res) => {
+router.put('/:id/role', authenticateToken, authorizeSuperadmin, async (req, res) => {
     try {
         const userId = req.params.id;
         const { role } = req.body;
@@ -177,12 +186,12 @@ router.put('/:id/role', authenticateToken, async (req, res) => {
         }
 
         const normalizedRole = role.trim().toLowerCase();
-        const allowedRoles = ['admin', 'user'];
+        const allowedRoles = ['admin', 'user', 'superadmin'];
 
         if (!allowedRoles.includes(normalizedRole)) {
             return res.status(400).json({
                 success: false,
-                error: 'Invalid role. Allowed values are admin and user'
+                error: 'Invalid role. Allowed values are admin, user, and superadmin'
             });
         }
 
@@ -220,7 +229,7 @@ router.put('/:id/role', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/admin/users/:id - Delete a user
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticateToken, authorizeSuperadmin, async (req, res) => {
     try {
         const userId = req.params.id;
 
