@@ -20,10 +20,6 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 const s3 = new S3Client({
-  credentials: {
-    accessKeyId: accessKey,
-    secretAccessKey: secretAccessKey,
-  },
   region: bucketRegion,
 });
 
