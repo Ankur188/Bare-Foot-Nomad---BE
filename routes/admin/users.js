@@ -163,6 +163,62 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// PUT /api/admin/users/:id/role - Update a user's role
+router.put('/:id/role', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const { role } = req.body;
+
+        if (!role || typeof role !== 'string') {
+            return res.status(400).json({
+                success: false,
+                error: 'Role is required'
+            });
+        }
+
+        const normalizedRole = role.trim().toLowerCase();
+        const allowedRoles = ['admin', 'user'];
+
+        if (!allowedRoles.includes(normalizedRole)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid role. Allowed values are admin and user'
+            });
+        }
+
+        const existingUserQuery = 'SELECT id, role FROM users WHERE id = $1';
+        const existingUser = await pool.query(existingUserQuery, [userId]);
+
+        if (existingUser.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        const updateQuery = `
+            UPDATE users
+            SET role = $1
+            WHERE id = $2
+            RETURNING id, name, email, phone_number, created_at, role;
+        `;
+
+        const result = await pool.query(updateQuery, [normalizedRole, userId]);
+
+        return res.json({
+            success: true,
+            message: 'User role updated successfully',
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error updating user role:', error);
+        return res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 // DELETE /api/admin/users/:id - Delete a user
 router.delete('/:id', authenticateToken, async (req, res) => {
     try {

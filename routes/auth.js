@@ -2,7 +2,7 @@ import express from 'express';
 import pool from '../db.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import {jwtTokens} from  '../utils/jwt-helpers.js';
+import { getRefreshTokenSecret, jwtTokens, requireJwtSecret } from  '../utils/jwt-helpers.js';
 import { authenticateToken } from '../middleware/authorization.js';
 
 const router = express.Router();
@@ -35,7 +35,8 @@ router.post('/refresh-token', (req,res) => {
         // Support both cookie and body refresh token
         const refreshToken = req.cookies.refresh_token || req.body.refreshToken;
         if(!refreshToken) return res.status(401).json({error: 'No refresh token'});
-        jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (error, user)=> {
+        const refreshTokenSecret = requireJwtSecret(getRefreshTokenSecret(), 'REFRESH_TOKEN_SECRET');
+        jwt.verify(refreshToken, refreshTokenSecret, (error, user)=> {
             if(error) return res.status(403).json({error: error.message})
             let tokens = jwtTokens(user);
             res.cookie('refresh_token', tokens.refreshToken, {httpOnly: true});
@@ -52,7 +53,8 @@ router.get('/refreshToken', (req,res) => {
     try {
         const refreshToken = req.cookies.refresh_token;
         if(refreshToken === null) return res.status(401).json({error: 'No refresh token'});
-        jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (error, user)=> {
+        const refreshTokenSecret = requireJwtSecret(getRefreshTokenSecret(), 'REFRESH_TOKEN_SECRET');
+        jwt.verify(refreshToken, refreshTokenSecret, (error, user)=> {
             if(error) return res.status(403).json({error: error.message})
             let tokens = jwtTokens(user);
             res.cookie('refresh_token', tokens.refreshToken, {httpOnly: true});

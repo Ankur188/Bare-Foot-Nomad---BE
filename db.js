@@ -16,7 +16,7 @@ const pool = new Pool({
   port: 5432,
   database: "barefootNomad",
   user: "postgres",
-  password: "Batman@188",
+  password: "postgres",
   // Only enable SSL when explicitly requested (e.g. connecting to managed RDS)
   ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : false,
 });
