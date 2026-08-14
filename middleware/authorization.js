@@ -1,5 +1,4 @@
 import jwt from 'jsonwebtoken';
-import { getAccessTokenSecret, requireJwtSecret } from '../utils/jwt-helpers.js';
 import pool from '../db.js';
 
 
