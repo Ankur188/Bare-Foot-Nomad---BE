@@ -314,7 +314,7 @@ router.post('/', authenticateToken, upload.single('invoice'), async (req, res) =
             paymentNum,
             travellersNum,
             roomType,
-            0 // invoice_id set to 0 initially
+            null // Invoice files are stored using the booking ID.
         ]);
 
         const bookingId = result.rows[0].id;

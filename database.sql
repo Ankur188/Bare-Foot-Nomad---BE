@@ -59,7 +59,7 @@ CREATE TABLE bookings (
     payment INT NOT NUll,
     travellers INT NOT NUll,
     room_type TEXT NOT NULL,
-    invoice_id INT NOT NULL
+    invoice_id uuid
 )
 
 CREATE TABLE leads (
