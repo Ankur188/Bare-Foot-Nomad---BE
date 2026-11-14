@@ -21,7 +21,8 @@ CREATE TABLE trips (
     excluions TEXT NOT NULL,
     days INT NOT NULL,
     nights INT NOT NULL,
-    status BOOLEAN DEFAULT TRUE NOT NULL
+    status BOOLEAN DEFAULT TRUE NOT NULL,
+    recommend BOOLEAN DEFAULT FALSE NOT NULL
 );
 
 

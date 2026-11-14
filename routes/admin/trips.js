@@ -156,7 +156,11 @@ router.post('/', authenticateToken, upload.fields([
     { name: 'itinerary', maxCount: 1 }
 ]), async (req, res) => {
     try {
-        const { name, description, numberOfDays, daysData, days, nights, destinations, physicalRating } = req.body;
+        const { name, description, numberOfDays, daysData, days, nights, destinations, physicalRating, recommend } = req.body;
+
+        if (recommend !== undefined && ![true, false, 'true', 'false'].includes(recommend)) {
+            return res.status(400).json({ success: false, error: 'Recommend must be true or false' });
+        }
         
         // Validate required fields
         if (!name || !description || !numberOfDays || !daysData || !days || !nights || !destinations || !physicalRating ) {
@@ -262,8 +266,9 @@ router.post('/', authenticateToken, upload.fields([
                     inclusions,
                     excluions,
                     status,
-                    images
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    images,
+                    recommend
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 RETURNING *;
             `;
 
@@ -278,7 +283,8 @@ router.post('/', authenticateToken, upload.fields([
                 '', // Default inclusions (can be added to form later)
                 '', // Default exclusions (can be added to form later)
                 true, // Active by default
-                imageKeys.length // Number of images uploaded
+                imageKeys.length, // Number of images uploaded
+                recommend === true || recommend === 'true'
             ]);
 
             res.status(201).json({
@@ -323,7 +329,11 @@ router.put('/:id', authenticateToken, upload.fields([
 ]), async (req, res) => {
     try {
         const tripId = req.params.id;
-        const { status, name, description, days, nights, destinations, physicalRating, daysData } = req.body;
+        const { status, name, description, days, nights, destinations, physicalRating, daysData, recommend } = req.body;
+
+        if (recommend !== undefined && ![true, false, 'true', 'false'].includes(recommend)) {
+            return res.status(400).json({ success: false, error: 'Recommend must be true or false' });
+        }
         
         // Check if trip exists
         const existingTripQuery = 'SELECT id, destination_name FROM trips WHERE id = $1';
@@ -471,6 +481,12 @@ router.put('/:id', authenticateToken, upload.fields([
         if (status !== undefined) {
             updates.push(`status = $${paramCount}`);
             values.push(status);
+            paramCount++;
+        }
+
+        if (recommend !== undefined) {
+            updates.push(`recommend = $${paramCount}`);
+            values.push(recommend === true || recommend === 'true');
             paramCount++;
         }
 

@@ -182,9 +182,15 @@ async function getTripItineraryKey(bucketName, tripName) {
 // Route to get all trips with earliest and latest batch dates
 router.get("/", async (req, res) => {
   try {
+    const recommended = req.query.recommended === 'true';
+    
     // Fetch all trips with the batch that has the lowest price, plus earliest and latest dates
-    const tripsResult = await pool.query(
-      `SELECT 
+    let whereClause = 'WHERE t.status = true';
+    if (recommended) {
+      whereClause += ' AND t.recommend = true';
+    }
+    
+    const query = `SELECT 
          t.*,
          b.id AS batch_id,
          b.from_date AS batch_from_date,
@@ -214,9 +220,10 @@ router.get("/", async (req, res) => {
          WHERE status = true
          GROUP BY trip_id
        ) date_agg ON date_agg.trip_id = t.id
-       WHERE t.status = true
-       ORDER BY t.destination_name;`
-    );
+       ${whereClause}
+       ORDER BY t.destination_name;`;
+    
+    const tripsResult = await pool.query(query);
     
     console.log('trips with lowest price batch', tripsResult.rows);
 
